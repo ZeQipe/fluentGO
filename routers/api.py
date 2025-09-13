@@ -467,8 +467,17 @@ async def upload_audio(file: UploadFile, request: Request, client_id: str = Form
     from routers.websocket import button_connection_manager
     
     client_ip = client_id
+    
+    # Проверяем, есть ли WebSocket соединение для этого клиента
     audio_queue = await button_connection_manager.get_property(client_ip,'queue')
     play_queue = await button_connection_manager.get_property(client_ip,'play')
+    
+    if audio_queue is None or play_queue is None:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"WebSocket connection not found for client_id: {client_id}. Ensure WebSocket is connected first."
+        )
+    
     await button_connection_manager.send_text(client_ip,'В обработку принят файл.')
     
     # Очищаем очереди
