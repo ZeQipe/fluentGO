@@ -1,0 +1,126 @@
+[
+  {
+    "id": "free-guest",
+    "name": "Free Guest",
+    "price": "$0",
+    "period": "/мес",
+    "features": [
+      {
+        "text": "1 демо-диалог (2 минуты)",
+        "included": true
+      },
+      {
+        "text": "Базовые темы",
+        "included": true
+      },
+      {
+        "text": "Голосовые сообщения",
+        "included": true
+      },
+      {
+        "text": "Без регистрации",
+        "included": true
+      }
+    ],
+    "tariff": "free",
+    "buttonText": "Текущий",
+    "buttonType": "standard",
+    "disabled": false
+  },
+  {
+    "id": "pay-as-you-go",
+    "name": "Pay-as-you-go",
+    "price": "$15",
+    "period": "/100 мин",
+    "features": [
+      {
+        "text": "100 минут разговора",
+        "included": true
+      },
+      {
+        "text": "Все темы и сценарии",
+        "included": true
+      },
+      {
+        "text": "Реальное время + голосовые",
+        "included": true
+      },
+      {
+        "text": "Детальная аналитика",
+        "included": true
+      },
+      {
+        "text": "Минуты не сгорают",
+        "included": true
+      }
+    ],
+    "tariff": "pay-as-you-go",
+    "buttonText": "Купить",
+    "buttonType": "secondary",
+    "disabled": false
+  },
+  {
+    "id": "standart",
+    "name": "Подписка Standart",
+    "price": "$9",
+    "period": "/мес",
+    "features": [
+      {
+        "text": "50 мин/мес",
+        "included": true
+      },
+      {
+        "text": "Приоритетная поддержка",
+        "included": true
+      },
+      {
+        "text": "Персональные сценарии",
+        "included": true
+      },
+      {
+        "text": "Экспорт диалогов",
+        "included": true
+      },
+      {
+        "text": "Расширенная аналитика",
+        "included": true
+      }
+    ],
+    "tariff": "standart",
+    "buttonText": "Начать",
+    "buttonType": "secondary",
+    "disabled": false
+  },
+  {
+    "id": "pro",
+    "name": "Подписка PRO",
+    "price": "$29",
+    "period": "/мес",
+    "features": [
+      {
+        "text": "Безлимитные разговоры",
+        "included": true
+      },
+      {
+        "text": "Приоритетная поддержка",
+        "included": true
+      },
+      {
+        "text": "Персональные сценарии",
+        "included": true
+      },
+      {
+        "text": "Экспорт диалогов",
+        "included": true
+      },
+      {
+        "text": "Расширенная аналитика",
+        "included": true
+      }
+    ],
+    "tariff": "pro",
+    "buttonText": "Начать",
+    "buttonType": "secondary",
+    "disabled": false
+  }
+]

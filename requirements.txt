@@ -1,0 +1,14 @@
+fastapi
+aiosqlite
+PyJWT
+python-dotenv
+httpx
+aiofiles
+openai
+aiohttp
+numpy
+python-multipart
+silero-vad
+uvicorn[standard]
+torch
+torchaudio
