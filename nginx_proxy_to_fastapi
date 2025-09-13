@@ -1,0 +1,118 @@
+# FluentGO - альтернативный конфиг с проксированием на FastAPI
+# FastAPI сам обрабатывает статику и trailing slash логику
+# Для /etc/nginx/sites-available/default
+
+# HTTP -> HTTPS редирект
+server {
+    listen 80;
+    listen [::]:80;
+    server_name en.workandtravel.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# ОСНОВНОЙ HTTPS СЕРВЕР
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name en.workandtravel.com;
+    
+    # SSL
+    ssl_certificate /etc/letsencrypt/live/en.workandtravel.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/en.workandtravel.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    
+    # Общие настройки
+    client_max_body_size 50M;
+    
+    # Логи
+    access_log /var/log/nginx/fluentgo.access.log;
+    error_log /var/log/nginx/fluentgo.error.log;
+    
+    # ===================================
+    # ВАРИАНТ 1: ВСЁ ПРОКСИРУЕМ НА FASTAPI
+    # FastAPI сам разберется со статикой и trailing slash
+    # ===================================
+    
+    # API эндпоинты
+    location /api/ {
+        proxy_pass http://127.0.0.1:8055/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+    
+    # WebSocket VAD
+    location /ws {
+        proxy_pass http://127.0.0.1:8055/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 3600s;
+        proxy_buffering off;
+    }
+    
+    # WebSocket Button
+    location /ws-button {
+        proxy_pass http://127.0.0.1:8055/ws-button;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 3600s;
+        proxy_buffering off;
+    }
+    
+    # ===================================
+    # ВСЁ ОСТАЛЬНОЕ - НА FASTAPI
+    # Он сам обработает статику, trailing slash и т.д.
+    # ===================================
+    location / {
+        proxy_pass http://127.0.0.1:8055/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Важно для правильной работы редиректов
+        proxy_redirect off;
+        
+        # Буферизация для статики
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+    }
+    
+    # Безопасность
+    server_tokens off;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+# ===================================
+# ПРЕИМУЩЕСТВА ЭТОГО ПОДХОДА:
+# ===================================
+# 1. FastAPI сам обрабатывает trailing slash логику (у вас есть middleware для этого)
+# 2. FastAPI правильно раздает статику из папки static
+# 3. Работает точно так же как при локальном запуске
+# 4. Нет рассинхрона между nginx и FastAPI логикой
+#
+# НЕДОСТАТОК:
+# - Чуть менее эффективно для статики (но не критично)
+#
+# ===================================
+# УСТАНОВКА:
+# ===================================
+# sudo cp nginx_proxy_to_fastapi /etc/nginx/sites-available/default
+# sudo nginx -t
+# sudo systemctl reload nginx
