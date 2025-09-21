@@ -42,6 +42,9 @@ def try_serve(path: str) -> FileResponse | None:
 def create_app() -> FastAPI:
     """Создание и настройка FastAPI приложения"""
     
+    # Создаем папку temp при запуске приложения
+    os.makedirs("temp", exist_ok=True)
+    
     app = FastAPI(title="FluentGo Voice Assistant", version="1.0.0")
     
     # CSRF middleware
