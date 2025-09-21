@@ -55,7 +55,11 @@ def create_app() -> FastAPI:
             "http://localhost:3000", 
             "http://172.18.0.1:3000",
             "http://127.0.0.1:8000",
-            "http://localhost:8000"
+            "http://localhost:8000",
+            "https://postes.ru",
+            "https://www.postes.ru",
+            "http://postes.ru",
+            "http://www.postes.ru"
         ],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
