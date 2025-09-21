@@ -17,6 +17,10 @@ if not OUT_DIR.exists():
 app = create_app()
 
 if __name__ == "__main__":
+    # Отключаем NNPACK предупреждения
+    import os
+    os.environ['NNPACK_DISABLE'] = '1'
+    
     import uvicorn
     uvicorn.run("run:app", 
     host="0.0.0.0", 

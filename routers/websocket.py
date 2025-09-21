@@ -112,7 +112,7 @@ async def websocket_endpoint(websocket: WebSocket):
         Цикл для получения аудио-чанков от пользователя
         """
         start_time = time.time()
-        RECEIVE_TIMEOUT = 16
+        RECEIVE_TIMEOUT = 60  # Увеличили с 16 до 60 секунд
         while True:
             try:
                 data = await asyncio.wait_for(
