@@ -793,7 +793,7 @@ async def get_crm_tariffs():
         
         return {
             "status": "success",
-            "tariffs": tariffs_data.get("tariffs", [])
+            "tariffs": tariffs_data
         }
         
     except Exception as e:
