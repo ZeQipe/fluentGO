@@ -6,7 +6,7 @@ from starlette.staticfiles import StaticFiles
 import os
 
 from database import db_handler
-from routers import api, websocket
+from routers import api, websocket, crm
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -103,6 +103,7 @@ def create_app() -> FastAPI:
     
     # Подключение роутеров
     app.include_router(api.router, prefix="/api", tags=["API"])
+    app.include_router(crm.router, prefix="/crm", tags=["CRM"])
     app.include_router(websocket.router, tags=["WebSocket"])
 
     @app.get("/{full_path:path}")
