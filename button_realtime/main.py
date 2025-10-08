@@ -39,9 +39,28 @@ async def index():
 # Эндпоинт для отправки аудио от клиента
 @app.post("/upload-audio/")
 async def upload_audio(file: UploadFile, request: Request, client_id: str = Form(...)):
+    from fastapi import HTTPException
+    from database import db_handler
+    
     client_ip = client_id
     audio_queue = await connection_manager.get_property(client_ip,'queue')
     play_queue = await connection_manager.get_property(client_ip,'play')
+    
+    # Проверяем оставшееся время перед обработкой
+    user_id = await connection_manager.get_property(client_ip, 'user_id')
+    if user_id:
+        remaining_seconds = await db_handler.get_remaining_seconds(user_id)
+        if remaining_seconds <= 0:
+            await connection_manager.send_text(
+                client_ip, 
+                "У вас закончились минуты. Пожалуйста, пополните баланс для продолжения."
+            )
+            await connection_manager.disconnect(client_ip)
+            raise HTTPException(
+                status_code=403,
+                detail="У вас закончились минуты. Пожалуйста, пополните баланс для продолжения."
+            )
+    
     await connection_manager.send_text(client_ip,'В обработку принят файл.')
     while not audio_queue.empty():
         await audio_queue.get()
@@ -69,10 +88,23 @@ async def websocket_endpoint(websocket: WebSocket):
     query_params = websocket.query_params
     voice = query_params.get('voice', None)
     topic = query_params.get('topic', None)
-    print(topic)
+    response_length = query_params.get('response_length', 'normal').lower()
+    
+    # Валидация длины ответа
+    valid_response_lengths = ['short', 'normal', 'long']
+    if response_length not in valid_response_lengths:
+        response_length = 'normal'
+    
+    print(f"Topic: {topic}, Response Length: {response_length}")
     if topic != 'none':
         await connection_manager.set_property(client_ip, 'topic', topic)
     await connection_manager.set_property(client_ip, 'voice', voice)
+    await connection_manager.set_property(client_ip, 'response_length', response_length)
+    
+    # Устанавливаем user_id для standalone режима (используем client_ip)
+    await connection_manager.set_property(client_ip, 'user_id', client_ip)
+    await connection_manager.set_property(client_ip, 'is_authenticated', False)
+    
     logger.info(f'New connection! Total users: {len(connection_manager.connections)}')
     await connection_manager.send_text(client_ip, f'CONNECTED:{client_ip}')
     await connection_manager.send_text(client_ip, 'Успешно подключено')

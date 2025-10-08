@@ -145,6 +145,21 @@ def int2float(sound):
 
 async def save_and_process_audio(connection_manager, client_ip: str):
     """Сохраняет и обрабатывает аудиофайл"""
+    # Проверяем оставшееся время перед обработкой
+    from database import db_handler
+    
+    user_id = await connection_manager.get_property(client_ip, 'user_id')
+    if user_id:
+        remaining_seconds = await db_handler.get_remaining_seconds(user_id)
+        if remaining_seconds <= 0:
+            await connection_manager.send_text(
+                client_ip, 
+                "У вас закончились минуты. Пожалуйста, пополните баланс для продолжения."
+            )
+            # Разрываем соединение
+            await connection_manager.disconnect(client_ip)
+            return
+    
     connection = connection_manager.connections[client_ip]
     audio_data = connection['audio_buffer'].getvalue()
     connection['is_recording'] = False

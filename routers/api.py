@@ -471,6 +471,22 @@ async def upload_audio(file: UploadFile, request: Request, client_id: str = Form
             detail=f"WebSocket connection not found for client_id: {client_id}. Ensure WebSocket is connected first."
         )
     
+    # Проверяем оставшееся время перед обработкой
+    user_id = await button_connection_manager.get_property(client_ip, 'user_id')
+    if user_id:
+        remaining_seconds = await db_handler.get_remaining_seconds(user_id)
+        if remaining_seconds <= 0:
+            await button_connection_manager.send_text(
+                client_ip, 
+                "У вас закончились минуты. Пожалуйста, пополните баланс для продолжения."
+            )
+            # Разрываем соединение
+            await button_connection_manager.disconnect(client_ip)
+            raise HTTPException(
+                status_code=403,
+                detail="У вас закончились минуты. Пожалуйста, пополните баланс для продолжения."
+            )
+    
     await button_connection_manager.send_text(client_ip,'В обработку принят файл.')
     
     # Очищаем очереди

@@ -43,6 +43,7 @@ class ConnectionManager:
                 'llm_task': None, # Поток генерации ответа от LLM
                 'voice': 1,
                 'topic': None,
+                'response_length': 'normal',  # Длина ответа: short, normal, long
                 'agent': None,
                 # Таймеры для подсчета времени - используем очередь для параллельных запросов
                 'time_tracking_queue': [],  # Очередь для отслеживания времени каждого запроса
@@ -243,10 +244,21 @@ async def apply_settings(connection_manager, client_ip):
 
     voice = await connection_manager.get_property(client_ip, 'voice')
     topic = await connection_manager.get_property(client_ip, 'topic')
+    response_length = await connection_manager.get_property(client_ip, 'response_length')
+    
+    # Формируем инструкцию с темой
     if topic:
         instruction = INSTRUCTIONS_4.replace('[МЕСТО ДЛЯ ВСТАВКИ ТЕМАТИКИ]',f'## Тема разговора: {topic}')
     else:
         instruction = INSTRUCTIONS_4.replace('[МЕСТО ДЛЯ ВСТАВКИ ТЕМАТИКИ]', f'## Темы разговора нет, свободно говори о чем угодно.')
+    
+    # Добавляем инструкцию по длине ответа
+    if response_length == 'short':
+        instruction += '\n\n## Длина ответа: Старайся делать ответ более коротким.'
+    elif response_length == 'long':
+        instruction += '\n\n## Длина ответа: Старайся делать ответ более длинным.'
+    # Для 'normal' ничего не добавляем
+    
     agent = AsyncOpenAIAgent(instruction,connection_manager,client_ip,"gpt-4o-realtime-preview-2024-12-17",voice)
     await agent.connect()
     await connection_manager.set_property(client_ip, 'agent', agent)

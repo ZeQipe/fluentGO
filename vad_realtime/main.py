@@ -62,10 +62,22 @@ async def websocket_endpoint(websocket: WebSocket):
     query_params = websocket.query_params
     voice = query_params.get('voice', None)
     topic = query_params.get('topic', None)
-    print(topic)
+    response_length = query_params.get('response_length', 'normal').lower()
+    
+    # Валидация длины ответа
+    valid_response_lengths = ['short', 'normal', 'long']
+    if response_length not in valid_response_lengths:
+        response_length = 'normal'
+    
+    print(f"Topic: {topic}, Response Length: {response_length}")
     if topic != 'none':
         await connection_manager.set_property(client_ip,'topic', topic)
     await connection_manager.set_property(client_ip, 'voice', voice)
+    await connection_manager.set_property(client_ip, 'response_length', response_length)
+    
+    # Устанавливаем user_id для standalone режима (используем client_ip)
+    await connection_manager.set_property(client_ip, 'user_id', client_ip)
+    await connection_manager.set_property(client_ip, 'is_authenticated', False)
 
     logger.info(f'New connection! Total users: {len(connection_manager.connections)}')
     await connection_manager.send_text(client_ip, 'Успешно подключено')

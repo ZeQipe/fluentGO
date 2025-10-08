@@ -58,7 +58,8 @@ class DatabaseHandler:
                     email TEXT,
                     tariff TEXT,
                     payment_date INTEGER,
-                    payment_status TEXT
+                    payment_status TEXT,
+                    status TEXT
                 )
             """)
             
@@ -92,7 +93,8 @@ class DatabaseHandler:
                 'email': 'TEXT',
                 'tariff': 'TEXT',
                 'payment_date': 'INTEGER',
-                'payment_status': 'TEXT'
+                'payment_status': 'TEXT',
+                'status': 'TEXT'
             }
             
             # Проверяем, есть ли старое поле remaining_time и нужно ли его мигрировать
@@ -186,16 +188,16 @@ class DatabaseHandler:
                     if exists:
                         # Обновляем существующего пользователя
                         await db.execute(
-                            "UPDATE users SET user_name = ?, remaining_seconds = ?, permanent_seconds = ?, email = ?, tariff = ?, payment_status = ? WHERE id = ?",
-                            (user_data["user_name"], user_seconds, permanent_seconds, user_data["email"], user_data["tariff"], "active", user_id)
+                            "UPDATE users SET user_name = ?, remaining_seconds = ?, permanent_seconds = ?, email = ?, tariff = ?, payment_status = ?, status = ? WHERE id = ?",
+                            (user_data["user_name"], user_seconds, permanent_seconds, user_data["email"], user_data["tariff"], "active", "active", user_id)
                         )
                         logger.info(f"Пользователь {user_id} обновлен: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
                     else:
                         # Создаем нового пользователя
                         await db.execute("""
-                            INSERT INTO users (id, user_name, remaining_seconds, permanent_seconds, iat, exp, email, tariff, payment_date, payment_status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (user_id, user_data["user_name"], user_seconds, permanent_seconds, None, None, user_data["email"], user_data["tariff"], None, "active"))
+                            INSERT INTO users (id, user_name, remaining_seconds, permanent_seconds, iat, exp, email, tariff, payment_date, payment_status, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (user_id, user_data["user_name"], user_seconds, permanent_seconds, None, None, user_data["email"], user_data["tariff"], None, "active", "active"))
                         logger.info(f"Пользователь {user_id} создан: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
                 
                 await db.commit()
@@ -212,16 +214,20 @@ class DatabaseHandler:
             row = await cursor.fetchone()
             return dict(row) if row else None
     
-    async def create_user(self, user_id: str, user_name: str, remaining_seconds: int = 0, 
-                         permanent_seconds: int = 0, iat: int = None, exp: int = None, 
-                         email: str = None) -> bool:
+    async def create_user(self, user_id: str, user_name: str, email: str,
+                         remaining_seconds: int = 0, permanent_seconds: int = 0, 
+                         iat: int = None, exp: int = None, tariff: str = "free",
+                         payment_status: str = "unpaid", payment_date: int = None,
+                         status: str = "default") -> bool:
         """Создание нового пользователя"""
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("""
-                    INSERT INTO users (id, user_name, remaining_seconds, permanent_seconds, iat, exp, email)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (user_id, user_name, remaining_seconds, permanent_seconds, iat, exp, email))
+                    INSERT INTO users (id, user_name, email, remaining_seconds, permanent_seconds, 
+                                      iat, exp, tariff, payment_status, payment_date, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (user_id, user_name, email, remaining_seconds, permanent_seconds, 
+                      iat, exp, tariff, payment_status, payment_date, status))
                 await db.commit()
                 return True
         except sqlite3.IntegrityError:
@@ -237,7 +243,7 @@ class DatabaseHandler:
         set_parts = []
         values = []
         for key, value in kwargs.items():
-            if key in ['user_name', 'remaining_seconds', 'permanent_seconds', 'iat', 'exp', 'email', 'tariff', 'payment_date', 'payment_status']:
+            if key in ['user_name', 'remaining_seconds', 'permanent_seconds', 'iat', 'exp', 'email', 'tariff', 'payment_date', 'payment_status', 'status']:
                 set_parts.append(f"{key} = ?")
                 values.append(value)
         

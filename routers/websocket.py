@@ -86,17 +86,24 @@ async def websocket_endpoint(websocket: WebSocket):
     query_params = websocket.query_params
     voice = query_params.get('voice', 'alloy').lower()  # Приводим к нижнему регистру
     topic = query_params.get('topic', None)
+    response_length = query_params.get('response_length', 'normal').lower()
     
     # Валидация голоса
     valid_voices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar']
     if voice not in valid_voices:
         voice = 'alloy'  # Fallback на alloy
     
-    print(f"VAD WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}")
+    # Валидация длины ответа
+    valid_response_lengths = ['short', 'normal', 'long']
+    if response_length not in valid_response_lengths:
+        response_length = 'normal'  # Fallback на normal
+    
+    print(f"VAD WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}, response_length: {response_length}")
     
     if topic != 'none':
         await vad_connection_manager.set_property(client_ip,'topic', topic)
     await vad_connection_manager.set_property(client_ip, 'voice', voice)
+    await vad_connection_manager.set_property(client_ip, 'response_length', response_length)
     
     # Сохраняем информацию о пользователе
     await vad_connection_manager.set_property(client_ip, 'user_id', user_id)
@@ -224,17 +231,24 @@ async def websocket_button_endpoint(websocket: WebSocket):
     query_params = websocket.query_params
     voice = query_params.get('voice', 'alloy').lower()  # Приводим к нижнему регистру
     topic = query_params.get('topic', None)
+    response_length = query_params.get('response_length', 'normal').lower()
     
     # Валидация голоса
     valid_voices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar']
     if voice not in valid_voices:
         voice = 'alloy'  # Fallback на alloy
     
-    print(f"Button WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}")
+    # Валидация длины ответа
+    valid_response_lengths = ['short', 'normal', 'long']
+    if response_length not in valid_response_lengths:
+        response_length = 'normal'  # Fallback на normal
+    
+    print(f"Button WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}, response_length: {response_length}")
     
     if topic != 'none':
         await button_connection_manager.set_property(client_ip, 'topic', topic)
     await button_connection_manager.set_property(client_ip, 'voice', voice)
+    await button_connection_manager.set_property(client_ip, 'response_length', response_length)
     
     # Сохраняем информацию о пользователе
     await button_connection_manager.set_property(client_ip, 'user_id', user_id)
