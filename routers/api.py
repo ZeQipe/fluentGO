@@ -249,7 +249,7 @@ async def get_tariffs(request: Request):
     """Получение доступных тарифов с учетом текущего тарифа пользователя"""
     try:
         # Загружаем тарифы из файла
-        with open("tariffs.json", "r", encoding="utf-8") as f:
+        with open("document/tariffs.json", "r", encoding="utf-8") as f:
             tariffs_data = json.load(f)
         
         # Получаем JWT токен из куков
@@ -351,6 +351,42 @@ async def get_most_popular_tariff():
     except:
         return "pro"  # Fallback
 
+@router.get("/help")
+async def get_help():
+    """Получение справочной информации из document/help_info.txt"""
+    try:
+        # Читаем файл
+        with open("document/help_info.txt", "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # Парсим по блокам (разделитель - две пустые строки)
+        blocks = content.strip().split("\n\n")
+        
+        help_items = []
+        for block in blocks:
+            lines = block.strip().split("\n", 1)  # Разделяем на заголовок и описание
+            if len(lines) == 2:
+                help_items.append({
+                    "title": lines[0].strip(),
+                    "description": lines[1].strip()
+                })
+            elif len(lines) == 1:
+                # Если только заголовок без описания
+                help_items.append({
+                    "title": lines[0].strip(),
+                    "description": ""
+                })
+        
+        return {
+            "status": "success",
+            "items": help_items
+        }
+        
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Файл справки не найден")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка чтения справки: {str(e)}")
+
 @router.get("/login")
 async def login(response: Response, login: str, password: str):
     """Авторизация тестовых пользователей"""
@@ -429,15 +465,21 @@ async def login(response: Response, login: str, password: str):
         }
 
 @router.get("/logout")
-async def logout(response: Response):
+async def logout(request: Request, response: Response):
     """Выход из системы - удаление токена из куков"""
     try:
+        # Проверяем наличие токена
+        token = request.cookies.get("auth_token_jwt")
+        
+        if not token:
+            raise HTTPException(status_code=404, detail="Токен не найден")
+        
         # Удаляем куку с токеном
         response.delete_cookie(
             key="auth_token_jwt",
             httponly=False,
-            secure=True,  # Обязательно для SameSite=None
-            samesite="none",  # Изменено на none для межсайтовых запросов
+            secure=True,
+            samesite="none",
             domain=None,
             path="/"
         )
@@ -447,11 +489,10 @@ async def logout(response: Response):
             "message": "Выход выполнен успешно"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Ошибка выхода: {str(e)}"
-        }
+        raise HTTPException(status_code=500, detail=f"Ошибка выхода: {str(e)}")
 
 # Button Realtime - эндпоинт для отправки аудио от клиента
 @router.post("/upload-audio/")

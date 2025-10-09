@@ -11,6 +11,7 @@ services:
       - .env
     volumes:
       - ./:/app
+      - ./document:/app/document
     ports:
       - "8055:8055"
     networks:

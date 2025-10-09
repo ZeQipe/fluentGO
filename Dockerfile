@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Создаем необходимые директории
-RUN mkdir -p temp static
+RUN mkdir -p temp static document
 
 # Устанавливаем переменные окружения
 ENV PYTHONPATH=/app

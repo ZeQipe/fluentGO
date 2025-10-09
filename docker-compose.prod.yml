@@ -19,7 +19,7 @@ services:
       - ./users.db:/app/users.db
       - ./temp:/app/temp
       - ./static:/app/static:ro
-      - ./tariffs.json:/app/tariffs.json:ro
+      - ./document:/app/document:ro
       - app_logs:/app/logs
     networks:
       - fluentgo_network
