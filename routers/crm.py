@@ -16,7 +16,7 @@ class CreateUserRequest(BaseModel):
     tariff: Optional[str] = "free"
     payment_status: Optional[str] = "unpaid"
     payment_date: Optional[int] = None
-    status: Optional[str] = "default"
+    status: Optional[str] = "user"
     iat: Optional[int] = None
     exp: Optional[int] = None
 
@@ -36,7 +36,7 @@ async def get_crm_tariffs():
     """CRM: Получение списка тарифов"""
     try:
         # Загружаем тарифы из файла
-        with open("tariffs.json", "r", encoding="utf-8") as f:
+        with open("document/tariffs.json", "r", encoding="utf-8") as f:
             tariffs_data = json.load(f)
         
         return {
@@ -92,7 +92,7 @@ async def create_crm_user(user_data: CreateUserRequest):
                 "tariff": created_user.get("tariff", "free"),
                 "payment_status": created_user.get("payment_status", "unpaid"),
                 "payment_date": created_user.get("payment_date"),
-                "status": created_user.get("status", "active")
+                "status": created_user.get("status", "user")
             }
         }
         
@@ -217,7 +217,7 @@ async def update_crm_user_status(user_id: str, status_data: UpdateUserStatusRequ
             "data": {
                 "user_id": updated_user["id"],
                 "user_name": updated_user["user_name"],
-                "status": updated_user.get("status", "active"),
+                "status": updated_user.get("status", "user"),
                 "email": updated_user.get("email"),
                 "tariff": updated_user.get("tariff", "free"),
                 "payment_status": updated_user.get("payment_status", "unpaid")

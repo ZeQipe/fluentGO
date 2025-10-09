@@ -189,7 +189,7 @@ class DatabaseHandler:
                         # Обновляем существующего пользователя
                         await db.execute(
                             "UPDATE users SET user_name = ?, remaining_seconds = ?, permanent_seconds = ?, email = ?, tariff = ?, payment_status = ?, status = ? WHERE id = ?",
-                            (user_data["user_name"], user_seconds, permanent_seconds, user_data["email"], user_data["tariff"], "active", "active", user_id)
+                            (user_data["user_name"], user_seconds, permanent_seconds, user_data["email"], user_data["tariff"], "active", "user", user_id)
                         )
                         logger.info(f"Пользователь {user_id} обновлен: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
                     else:
@@ -197,7 +197,7 @@ class DatabaseHandler:
                         await db.execute("""
                             INSERT INTO users (id, user_name, remaining_seconds, permanent_seconds, iat, exp, email, tariff, payment_date, payment_status, status)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (user_id, user_data["user_name"], user_seconds, permanent_seconds, None, None, user_data["email"], user_data["tariff"], None, "active", "active"))
+                        """, (user_id, user_data["user_name"], user_seconds, permanent_seconds, None, None, user_data["email"], user_data["tariff"], None, "active", "user"))
                         logger.info(f"Пользователь {user_id} создан: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
                 
                 await db.commit()
@@ -218,7 +218,7 @@ class DatabaseHandler:
                          remaining_seconds: int = 0, permanent_seconds: int = 0, 
                          iat: int = None, exp: int = None, tariff: str = "free",
                          payment_status: str = "unpaid", payment_date: int = None,
-                         status: str = "default") -> bool:
+                         status: str = "user") -> bool:
         """Создание нового пользователя"""
         try:
             async with aiosqlite.connect(self.db_path) as db:

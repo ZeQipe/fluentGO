@@ -4,6 +4,7 @@
     "name": "Free Guest",
     "price": "$0",
     "period": "/мес",
+    "statuses": [],
     "features": [
       {
         "text": "1 демо-диалог (2 минуты)",
@@ -32,6 +33,7 @@
     "name": "Pay-as-you-go",
     "price": "$15",
     "period": "/100 мин",
+    "statuses": [],
     "features": [
       {
         "text": "100 минут разговора",
@@ -64,6 +66,7 @@
     "name": "Подписка Standart",
     "price": "$9",
     "period": "/мес",
+    "statuses": [],
     "features": [
       {
         "text": "50 мин/мес",
@@ -96,6 +99,7 @@
     "name": "Подписка PRO",
     "price": "$29",
     "period": "/мес",
+    "statuses": [],
     "features": [
       {
         "text": "Безлимитные разговоры",
@@ -119,6 +123,39 @@
       }
     ],
     "tariff": "pro",
+    "buttonText": "Начать",
+    "buttonType": "secondary",
+    "disabled": false
+  },
+  {
+    "id": "pro-plus",
+    "name": "Подписка PRO +",
+    "price": "$14.5",
+    "period": "/мес",
+    "statuses": ["vip", "partner"],
+    "features": [
+      {
+        "text": "Безлимитные разговоры",
+        "included": true
+      },
+      {
+        "text": "Приоритетная поддержка",
+        "included": true
+      },
+      {
+        "text": "Персональные сценарии",
+        "included": true
+      },
+      {
+        "text": "Экспорт диалогов",
+        "included": true
+      },
+      {
+        "text": "Расширенная аналитика",
+        "included": true
+      }
+    ],
+    "tariff": "pro-plus",
     "buttonText": "Начать",
     "buttonType": "secondary",
     "disabled": false

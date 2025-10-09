@@ -255,14 +255,19 @@ async def get_tariffs(request: Request):
         # Получаем JWT токен из куков
         token = request.cookies.get("auth_token_jwt")
         current_user_tariff = "free"  # По умолчанию для неавторизованных
+        current_user_status = "user"  # По умолчанию статус обычного пользователя
         
         if token:
             try:
                 user_data = await JWTService.verify_user_from_token(token)
                 if user_data:
                     current_user_tariff = user_data.get("tariff", "free")
+                    # Получаем статус пользователя из БД
+                    user_db_data = await db_handler.get_user(user_data.get("id"))
+                    if user_db_data:
+                        current_user_status = user_db_data.get("status", "user")
             except:
-                pass  # Если токен невалидный, остаемся с free
+                pass  # Если токен невалидный, остаемся с free и user
         
         # Определяем популярный тариф через SQL
         popular_tariff = await get_most_popular_tariff()
@@ -271,6 +276,16 @@ async def get_tariffs(request: Request):
         result_tariffs = []
         
         for tariff in tariffs_data:
+            # Проверяем доступность тарифа по статусу
+            tariff_statuses = tariff.get("statuses", [])
+            
+            # Если statuses пустой, null или содержит "all" - доступен всем
+            if not tariff_statuses or "all" in tariff_statuses:
+                pass  # Тариф доступен
+            # Если статус пользователя не в списке разрешенных - скрываем тариф
+            elif current_user_status not in tariff_statuses:
+                continue  # Пропускаем этот тариф
+            
             tariff_copy = tariff.copy()
             
             # Логика для Free тарифа
