@@ -143,6 +143,8 @@
     "Разговоры сохраняются для анализа прогресса, но вы можете удалить их в любой момент. Мы не передаём данные третьим лицам.": "Conversations are saved for progress analysis, but you can delete them at any time. We don't share data with third parties.",
     "Нужно ли специальное оборудование?": "Do I need special equipment?",
     "Достаточно любого устройства с микрофоном и интернетом. Для лучшего качества рекомендуем наушники или гарнитуру.": "Any device with microphone and internet is sufficient. For better quality we recommend headphones or headset.",
+    "Какие настройки имеет ИИ-ассистент?": "What settings does the AI assistant have?",
+    "В настройках можно выбрать голос ассистента и темы разговора.": "In the settings you can choose the assistant's voice and the conversation topics.",
     "Баланс": "Balance",
     "мин": "min",
     "Выйти": "Logout",
