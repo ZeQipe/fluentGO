@@ -1,18 +1,21 @@
-Как работает ИИ-ассистент?
-ИИ использует передовые технологии распознавания речи и естественного языка для понимания вашей речи и генерации естественных ответов с учётом контекста разговора.
+How does the AI assistant work?
+The AI uses advanced speech recognition and natural language technologies to understand your speech and generate natural responses based on the conversation context.
 
-Какие языки поддерживаются?
-Поддерживаются английский, испанский, французский, немецкий, итальянский и другие популярные языки. Полный список доступен в настройках приложения.
+Which languages are supported?
+English, Spanish, French, German, Italian, and other popular languages are supported. The complete list is available in the app settings.
 
-В чём разница между режимами?
-Режим реального времени — это живой диалог как по телефону. Голосовые сообщения позволяют обдумать ответ и говорить в своём темпе.
+What's the difference between modes?
+Real-time mode is a live dialogue like a phone call. Voice messages allow you to think through your response and speak at your own pace.
 
-Можно ли отменить подписку?
-Да, подписку можно отменить в любой момент в настройках аккаунта. Доступ к функциям сохраняется до конца оплаченного периода.
+Can I cancel my subscription?
+Yes, you can cancel your subscription at any time in your account settings. Access to features is maintained until the end of the paid period.
 
-Сохраняются ли мои разговоры?
-Разговоры сохраняются для анализа прогресса, но вы можете удалить их в любой момент. Мы не передаём данные третьим лицам.
+Are my conversations saved?
+Conversations are saved for progress analysis, but you can delete them at any time. We do not share data with third parties.
 
-Нужно ли специальное оборудование?
-Достаточно любого устройства с микрофоном и интернетом. Для лучшего качества рекомендуем наушники или гарнитуру.
+Do I need special equipment?
+Any device with a microphone and internet connection is sufficient. For better quality, we recommend headphones or a headset.
+
+Voice assistant settings?
+You can choose one of the available languages, assistant response length, and select a topic for conversation. All these settings are available only after authorization.
 

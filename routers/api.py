@@ -366,6 +366,14 @@ async def get_most_popular_tariff():
     except:
         return "pro"  # Fallback
 
+@router.get("/language")
+async def get_language(request: Request):
+    """Получение текущего языка из куков"""
+    # Получаем язык из куков, если нет - возвращаем "en" по умолчанию
+    language = request.cookies.get("language", "en")
+    
+    return {"language": language}
+
 @router.get("/help")
 async def get_help():
     """Получение справочной информации из document/help_info.txt"""
