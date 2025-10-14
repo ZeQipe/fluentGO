@@ -80,6 +80,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await db_handler.create_user(
                 user_id=user_id,
                 user_name=f"Guest_{client_ip_address}",
+                email=f"guest_{client_ip_address}@temp.local",
                 remaining_seconds=120  # 2 минуты
             )
             await db_handler.update_user(
@@ -277,6 +278,7 @@ async def websocket_button_endpoint(websocket: WebSocket):
             await db_handler.create_user(
                 user_id=user_id,
                 user_name=f"Guest_{client_ip_address}",
+                email=f"guest_{client_ip_address}@temp.local",
                 remaining_seconds=120  # 2 минуты
             )
             await db_handler.update_user(
