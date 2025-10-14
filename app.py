@@ -100,6 +100,22 @@ def create_app() -> FastAPI:
         from vad_realtime.transcribation_utils import initialize_vad
         await initialize_vad()
         print("VAD модели готовы к работе!")
+        
+        # Запуск фоновой задачи очистки неактивных соединений
+        import asyncio
+        from routers.websocket import vad_connection_manager, button_connection_manager
+        
+        async def cleanup_task():
+            while True:
+                await asyncio.sleep(60)  # Проверяем каждую минуту
+                try:
+                    await vad_connection_manager.cleanup_stale_connections()
+                    await button_connection_manager.cleanup_stale_connections()
+                except Exception as e:
+                    print(f"Ошибка очистки соединений: {e}")
+        
+        asyncio.create_task(cleanup_task())
+        print("Фоновая задача очистки соединений запущена!")
     
     # Подключение роутеров
     app.include_router(api.router, prefix="/api", tags=["API"])

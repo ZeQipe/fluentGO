@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import time
 import aiofiles
 import json
+import uuid
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -19,6 +20,12 @@ load_dotenv()
 JWT_SECRET_KEY = os.getenv("JWT_secret")
 
 router = APIRouter()
+
+@router.get("/session-id")
+async def get_session_id():
+    """Получение уникального ID сессии для WebSocket соединения"""
+    session_id = str(uuid.uuid4())
+    return {"session_id": session_id}
 
 # Модели данных для платежей
 class CreatePaymentRequest(BaseModel):
@@ -519,39 +526,37 @@ async def logout(request: Request, response: Response):
 
 # Button Realtime - эндпоинт для отправки аудио от клиента
 @router.post("/upload-audio/")
-async def upload_audio(file: UploadFile, request: Request, client_id: str = Form(...)):
+async def upload_audio(file: UploadFile, request: Request, session_id: str = Form(...)):
     """Эндпоинт для загрузки аудио файлов (Button Realtime режим)"""
     from routers.websocket import button_connection_manager
     
-    client_ip = client_id
-    
     # Проверяем, есть ли WebSocket соединение для этого клиента
-    audio_queue = await button_connection_manager.get_property(client_ip,'queue')
-    play_queue = await button_connection_manager.get_property(client_ip,'play')
+    audio_queue = await button_connection_manager.get_property(session_id,'queue')
+    play_queue = await button_connection_manager.get_property(session_id,'play')
     
     if audio_queue is None or play_queue is None:
         raise HTTPException(
             status_code=400, 
-            detail=f"WebSocket connection not found for client_id: {client_id}. Ensure WebSocket is connected first."
+            detail=f"WebSocket connection not found for session_id: {session_id}. Ensure WebSocket is connected first."
         )
     
     # Проверяем оставшееся время перед обработкой
-    user_id = await button_connection_manager.get_property(client_ip, 'user_id')
+    user_id = await button_connection_manager.get_property(session_id, 'user_id')
     if user_id:
         remaining_seconds = await db_handler.get_remaining_seconds(user_id)
         if remaining_seconds <= 0:
             await button_connection_manager.send_text(
-                client_ip, 
+                session_id, 
                 "У вас закончились минуты. Пожалуйста, пополните баланс для продолжения."
             )
             # Разрываем соединение
-            await button_connection_manager.disconnect(client_ip)
+            await button_connection_manager.disconnect(session_id)
             raise HTTPException(
                 status_code=403,
                 detail="У вас закончились минуты. Пожалуйста, пополните баланс для продолжения."
             )
     
-    await button_connection_manager.send_text(client_ip,'В обработку принят файл.')
+    await button_connection_manager.send_text(session_id,'В обработку принят файл.')
     
     # Очищаем очереди
     while not audio_queue.empty():
@@ -567,7 +572,7 @@ async def upload_audio(file: UploadFile, request: Request, client_id: str = Form
     os.makedirs("temp", exist_ok=True)
     
     # Запускаем таймер обработки
-    await button_connection_manager.set_property(client_ip, 'processing_start_time', time.time())
+    await button_connection_manager.set_property(session_id, 'processing_start_time', time.time())
     
     async with aiofiles.open(file_path, 'wb') as out_file:
         content = await file.read()
@@ -579,10 +584,10 @@ async def upload_audio(file: UploadFile, request: Request, client_id: str = Form
         frames = wav_file.getnframes()
         sample_rate = wav_file.getframerate()
         duration = frames / sample_rate
-        await button_connection_manager.set_property(client_ip, 'voice_duration', duration)
+        await button_connection_manager.set_property(session_id, 'voice_duration', duration)
         
     resampled_file_path = resample_to_16khz(file_path)
-    await save_and_process_audio(button_connection_manager, client_ip, resampled_file_path)
+    await save_and_process_audio(button_connection_manager, session_id, resampled_file_path)
     
     return {"status": "success", "message": "Файл обработан"}
 

@@ -52,7 +52,9 @@ class ConnectionManager:
                 'response_start_time': None,  # Начало ответа
                 'response_duration': 0,  # Длительность ответа
                 'user_id': None,  # ID пользователя для вычета времени
-                'is_authenticated': False  # Статус авторизации
+                'is_authenticated': False,  # Статус авторизации
+                'last_ping': time.time(),  # Время последнего ping
+                'ping_timeout': 30  # Таймаут ping в секундах
             }
 
     async def set_llm_task(self, client_ip: str, task):
@@ -152,6 +154,37 @@ class ConnectionManager:
             if client_ip in self.connections:
                 return self.connections[client_ip][property]
             return None
+
+    async def ping(self, client_ip: str):
+        """Обновляет время последнего ping для соединения"""
+        async with self.lock:
+            if client_ip in self.connections:
+                self.connections[client_ip]['last_ping'] = time.time()
+
+    async def pong(self, client_ip: str):
+        """Отправляет pong ответ клиенту"""
+        await self.send_text(client_ip, "pong")
+
+    async def cleanup_stale_connections(self):
+        """Очищает неактивные соединения"""
+        current_time = time.time()
+        stale_connections = []
+        
+        async with self.lock:
+            for client_ip, connection in self.connections.items():
+                last_ping = connection.get('last_ping', 0)
+                ping_timeout = connection.get('ping_timeout', 30)
+                
+                if current_time - last_ping > ping_timeout:
+                    stale_connections.append(client_ip)
+        
+        # Отключаем неактивные соединения
+        for client_ip in stale_connections:
+            try:
+                await self.disconnect(client_ip)
+                logger.info(f"Cleaned up stale connection: {client_ip}")
+            except:
+                pass
 
 
 

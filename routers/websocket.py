@@ -56,8 +56,13 @@ async def websocket_endpoint(websocket: WebSocket):
     """
     WebSocket эндпоинт для голосового взаимодействия (VAD Realtime)
     """
-    client_ip = str(round(time.time()*100))
-    await vad_connection_manager.connect(websocket, client_ip)
+    # Получаем session_id из query параметров
+    session_id = websocket.query_params.get('session_id')
+    if not session_id:
+        await websocket.close(code=1008, reason="session_id required")
+        return
+    
+    await vad_connection_manager.connect(websocket, session_id)
     
     # Получаем user_id из JWT токена в куки
     user_id, is_authenticated = await get_user_id_from_cookies(websocket)
@@ -101,18 +106,18 @@ async def websocket_endpoint(websocket: WebSocket):
     print(f"VAD WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}, response_length: {response_length}")
     
     if topic != 'none':
-        await vad_connection_manager.set_property(client_ip,'topic', topic)
-    await vad_connection_manager.set_property(client_ip, 'voice', voice)
-    await vad_connection_manager.set_property(client_ip, 'response_length', response_length)
+        await vad_connection_manager.set_property(session_id,'topic', topic)
+    await vad_connection_manager.set_property(session_id, 'voice', voice)
+    await vad_connection_manager.set_property(session_id, 'response_length', response_length)
     
     # Сохраняем информацию о пользователе
-    await vad_connection_manager.set_property(client_ip, 'user_id', user_id)
-    await vad_connection_manager.set_property(client_ip, 'is_authenticated', is_authenticated)
+    await vad_connection_manager.set_property(session_id, 'user_id', user_id)
+    await vad_connection_manager.set_property(session_id, 'is_authenticated', is_authenticated)
 
     logger.info(f'New connection! Total users: {len(vad_connection_manager.connections)}')
-    await vad_connection_manager.send_text(client_ip, 'Успешно подключено')
+    await vad_connection_manager.send_text(session_id, 'Успешно подключено')
 
-    await vad_apply_settings(vad_connection_manager,client_ip)
+    await vad_apply_settings(vad_connection_manager, session_id)
 
     async def receive_chunk():
         """
@@ -122,31 +127,62 @@ async def websocket_endpoint(websocket: WebSocket):
         RECEIVE_TIMEOUT = 60  # Увеличили с 16 до 60 секунд
         while True:
             try:
-                data = await asyncio.wait_for(
-                    websocket.receive_bytes(),
+                # Пробуем получить данные (аудио или текст)
+                message = await asyncio.wait_for(
+                    websocket.receive(),
                     timeout=RECEIVE_TIMEOUT
                 )
-                frame = resample(data, 44100, 16000)
-                frame = frame[300:]
                 
-                # Убеждаемся, что размер кратен 2 для int16
-                if len(frame) % 2 != 0:
-                    frame = frame[:-1]
+                # Если это текстовое сообщение (ping/pong), игнорируем
+                if message["type"] == "websocket.receive" and "text" in message:
+                    continue
+                
+                # Если это аудио данные
+                if message["type"] == "websocket.receive" and "bytes" in message:
+                    data = message["bytes"]
+                    frame = resample(data, 44100, 16000)
+                    frame = frame[300:]
+                    
+                    # Убеждаемся, что размер кратен 2 для int16
+                    if len(frame) % 2 != 0:
+                        frame = frame[:-1]
 
-                await process_audio_chunk(vad_connection_manager, client_ip, frame)
+                    await process_audio_chunk(vad_connection_manager, session_id, frame)
 
                 await asyncio.sleep(0.05)
 
             except asyncio.TimeoutError:
-                logger.warning(f"Client {client_ip}: No audio data received for {RECEIVE_TIMEOUT} seconds")
+                logger.warning(f"Client {session_id}: No audio data received for {RECEIVE_TIMEOUT} seconds")
+                break
+
+    async def handle_ping_pong():
+        """
+        Обработка ping-pong сообщений
+        """
+        while True:
+            try:
+                message = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=10
+                )
+                if message == "ping":
+                    await vad_connection_manager.ping(session_id)
+                    await vad_connection_manager.pong(session_id)
+                elif message == "pong":
+                    await vad_connection_manager.ping(session_id)  # Обновляем время последнего ping
+            except asyncio.TimeoutError:
+                # Отправляем ping клиенту
+                await vad_connection_manager.send_text(session_id, "ping")
+                await vad_connection_manager.ping(session_id)
+            except:
                 break
 
     async def synthesize_and_queue(voice):
             """
             Цикл для синтеза аудио перед отправкой пользователю
             """
-            play_queue = await vad_connection_manager.get_property(client_ip, 'play')
-            agent = await vad_connection_manager.get_property(client_ip, 'agent')
+            play_queue = await vad_connection_manager.get_property(session_id, 'play')
+            agent = await vad_connection_manager.get_property(session_id, 'agent')
             while True:
                 try:
                     await agent.read_message(play_queue)
@@ -159,31 +195,32 @@ async def websocket_endpoint(websocket: WebSocket):
         Цикл для отправки синтезированного аудио ответа
         """
         last_audio = 0
-        play_queue = await vad_connection_manager.get_property(client_ip, 'play')
+        play_queue = await vad_connection_manager.get_property(session_id, 'play')
         while True:
             (response_audio, duration) = await play_queue.get()
             if time.time() - last_audio > 3:
                 await asyncio.sleep(1.4)
             last_audio = time.time()
-            await vad_connection_manager.send_bytes(client_ip, response_audio)
+            await vad_connection_manager.send_bytes(session_id, response_audio)
             #await asyncio.sleep(duration)
             await asyncio.sleep(0.05)
 
-    voice = await vad_connection_manager.get_property(client_ip, 'voice')
+    voice = await vad_connection_manager.get_property(session_id, 'voice')
 
     receive_task = asyncio.create_task(receive_chunk())
     synthesize_task = asyncio.create_task(synthesize_and_queue(voice))
     play_task = asyncio.create_task(play_audio())
+    ping_pong_task = asyncio.create_task(handle_ping_pong())
 
     try:
-        await asyncio.gather(receive_task, synthesize_task, play_task)
+        await asyncio.gather(receive_task, synthesize_task, play_task, ping_pong_task)
     except Exception as e:
         print(f"WebSocket error: {str(e)}")
         # Не отправляем ошибку в закрытое соединение
     finally:
         # Останавливаем LLM агента перед отменой задач
         try:
-            agent = await vad_connection_manager.get_property(client_ip, 'agent')
+            agent = await vad_connection_manager.get_property(session_id, 'agent')
             if agent:
                 await agent.disconnect()
         except:
@@ -191,18 +228,22 @@ async def websocket_endpoint(websocket: WebSocket):
         
         synthesize_task.cancel()
         play_task.cancel()
+        ping_pong_task.cancel()
         logger.info(f'Disconnected! Total users: {len(vad_connection_manager.connections)}')
-        await vad_connection_manager.disconnect(client_ip)
+        await vad_connection_manager.disconnect(session_id)
 
 @router.websocket("/ws-button")
 async def websocket_button_endpoint(websocket: WebSocket):
     """
     WebSocket эндпоинт для голосового взаимодействия (Button Realtime)
     """
-    client_ip = websocket.client.host
-    client_ip = f"user_{client_ip}"
+    # Получаем session_id из query параметров
+    session_id = websocket.query_params.get('session_id')
+    if not session_id:
+        await websocket.close(code=1008, reason="session_id required")
+        return
 
-    await button_connection_manager.connect(websocket, client_ip)
+    await button_connection_manager.connect(websocket, session_id)
     
     # Получаем user_id из JWT токена в куки
     user_id, is_authenticated = await get_user_id_from_cookies(websocket)
@@ -246,25 +287,47 @@ async def websocket_button_endpoint(websocket: WebSocket):
     print(f"Button WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}, response_length: {response_length}")
     
     if topic != 'none':
-        await button_connection_manager.set_property(client_ip, 'topic', topic)
-    await button_connection_manager.set_property(client_ip, 'voice', voice)
-    await button_connection_manager.set_property(client_ip, 'response_length', response_length)
+        await button_connection_manager.set_property(session_id, 'topic', topic)
+    await button_connection_manager.set_property(session_id, 'voice', voice)
+    await button_connection_manager.set_property(session_id, 'response_length', response_length)
     
     # Сохраняем информацию о пользователе
-    await button_connection_manager.set_property(client_ip, 'user_id', user_id)
-    await button_connection_manager.set_property(client_ip, 'is_authenticated', is_authenticated)
+    await button_connection_manager.set_property(session_id, 'user_id', user_id)
+    await button_connection_manager.set_property(session_id, 'is_authenticated', is_authenticated)
     logger.info(f'New connection! Total users: {len(button_connection_manager.connections)}')
-    await button_connection_manager.send_text(client_ip, f'CONNECTED:{client_ip}')
-    await button_connection_manager.send_text(client_ip, 'Успешно подключено')
+    await button_connection_manager.send_text(session_id, f'CONNECTED:{session_id}')
+    await button_connection_manager.send_text(session_id, 'Успешно подключено')
 
-    await button_apply_settings(button_connection_manager, client_ip)
+    await button_apply_settings(button_connection_manager, session_id)
+
+    async def handle_ping_pong():
+        """
+        Обработка ping-pong сообщений
+        """
+        while True:
+            try:
+                message = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=10
+                )
+                if message == "ping":
+                    await button_connection_manager.ping(session_id)
+                    await button_connection_manager.pong(session_id)
+                elif message == "pong":
+                    await button_connection_manager.ping(session_id)  # Обновляем время последнего ping
+            except asyncio.TimeoutError:
+                # Отправляем ping клиенту
+                await button_connection_manager.send_text(session_id, "ping")
+                await button_connection_manager.ping(session_id)
+            except:
+                break
 
     async def synthesize_and_queue(voice):
             """
             Цикл для синтеза аудио перед отправкой пользователю
             """
-            play_queue = await button_connection_manager.get_property(client_ip, 'play')
-            agent = await button_connection_manager.get_property(client_ip, 'agent')
+            play_queue = await button_connection_manager.get_property(session_id, 'play')
+            agent = await button_connection_manager.get_property(session_id, 'agent')
             while True:
                 try:
                     await agent.read_message(play_queue)
@@ -277,30 +340,31 @@ async def websocket_button_endpoint(websocket: WebSocket):
         Цикл для отправки синтезированного аудио ответа
         """
         last_audio = 0
-        play_queue = await button_connection_manager.get_property(client_ip, 'play')
+        play_queue = await button_connection_manager.get_property(session_id, 'play')
         while True:
             (response_audio, duration) = await play_queue.get()
             if time.time() - last_audio > 3:
                 await asyncio.sleep(1.4)
             last_audio = time.time()
-            await button_connection_manager.send_bytes(client_ip, response_audio)
+            await button_connection_manager.send_bytes(session_id, response_audio)
             # await asyncio.sleep(duration)
             await asyncio.sleep(0.05)
 
-    voice = await button_connection_manager.get_property(client_ip, 'voice')
+    voice = await button_connection_manager.get_property(session_id, 'voice')
 
     synthesize_task = asyncio.create_task(synthesize_and_queue(voice))
     play_task = asyncio.create_task(play_audio())
+    ping_pong_task = asyncio.create_task(handle_ping_pong())
 
     try:
-        await asyncio.gather(synthesize_task, play_task)
+        await asyncio.gather(synthesize_task, play_task, ping_pong_task)
     except Exception as e:
         print(f"Button WebSocket error: {str(e)}")
         # Не отправляем ошибку в закрытое соединение
     finally:
         # Останавливаем LLM агента перед отменой задач
         try:
-            agent = await button_connection_manager.get_property(client_ip, 'agent')
+            agent = await button_connection_manager.get_property(session_id, 'agent')
             if agent:
                 await agent.disconnect()
         except:
@@ -308,5 +372,6 @@ async def websocket_button_endpoint(websocket: WebSocket):
         
         synthesize_task.cancel()
         play_task.cancel()
+        ping_pong_task.cancel()
         logger.info(f'Disconnected! Total users: {len(button_connection_manager.connections)}')
-        await button_connection_manager.disconnect(client_ip)
+        await button_connection_manager.disconnect(session_id)
