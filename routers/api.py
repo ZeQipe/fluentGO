@@ -587,17 +587,33 @@ async def upload_audio(file: UploadFile, request: Request, session_id: str = For
     # Запускаем таймер обработки
     await button_connection_manager.set_property(session_id, 'processing_start_time', time.time())
     
+    # Проверяем размер файла перед сохранением
+    content = await file.read()
+    if len(content) == 0:
+        await button_connection_manager.send_text(session_id, "Ошибка: загруженный файл пустой")
+        raise HTTPException(status_code=400, detail="Файл пустой")
+    
     async with aiofiles.open(file_path, 'wb') as out_file:
-        content = await file.read()
         await out_file.write(content)
     
     # Получаем длительность аудио файла
     import wave
-    with wave.open(file_path, 'rb') as wav_file:
-        frames = wav_file.getnframes()
-        sample_rate = wav_file.getframerate()
-        duration = frames / sample_rate
-        await button_connection_manager.set_property(session_id, 'voice_duration', duration)
+    import os
+    
+    # Проверяем что файл существует и не пустой
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        await button_connection_manager.send_text(session_id, "Ошибка: загруженный файл пустой или поврежден")
+        raise HTTPException(status_code=400, detail="Файл пустой или поврежден")
+    
+    try:
+        with wave.open(file_path, 'rb') as wav_file:
+            frames = wav_file.getnframes()
+            sample_rate = wav_file.getframerate()
+            duration = frames / sample_rate
+            await button_connection_manager.set_property(session_id, 'voice_duration', duration)
+    except (wave.Error, EOFError) as e:
+        await button_connection_manager.send_text(session_id, f"Ошибка обработки аудио файла: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Некорректный аудио файл: {str(e)}")
         
     resampled_file_path = resample_to_16khz(file_path)
     await save_and_process_audio(button_connection_manager, session_id, resampled_file_path)
