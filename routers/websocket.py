@@ -114,6 +114,16 @@ async def websocket_endpoint(websocket: WebSocket):
     await vad_connection_manager.set_property(session_id, 'user_id', user_id)
     await vad_connection_manager.set_property(session_id, 'is_authenticated', is_authenticated)
 
+    # Проверяем баланс при подключении
+    if user_id:
+        from database import db_handler
+        remaining_seconds = await db_handler.get_remaining_seconds(user_id)
+        if remaining_seconds <= 0:
+            await vad_connection_manager.send_text(session_id, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+            await vad_connection_manager.disconnect(session_id)
+            await websocket.close(code=1008, reason="Access denied - no remaining time")
+            return
+
     logger.info(f'New connection! Total users: {len(vad_connection_manager.connections)}')
     await vad_connection_manager.send_text(session_id, 'Успешно подключено')
 
@@ -139,6 +149,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 # Если это аудио данные
                 if message["type"] == "websocket.receive" and "bytes" in message:
+                    # Обновляем активность при получении аудио чанков
+                    await vad_connection_manager.update_activity(session_id)
+                    
                     data = message["bytes"]
                     frame = resample(data, 44100, 16000)
                     frame = frame[300:]
@@ -163,13 +176,16 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 message = await asyncio.wait_for(
                     websocket.receive_text(),
-                    timeout=10
+                    timeout=5
                 )
                 if message == "ping":
                     await vad_connection_manager.ping(session_id)
                     await vad_connection_manager.pong(session_id)
                 elif message == "pong":
                     await vad_connection_manager.ping(session_id)  # Обновляем время последнего ping
+                else:
+                    # Любое другое текстовое сообщение обновляет активность
+                    await vad_connection_manager.update_activity(session_id)
             except asyncio.TimeoutError:
                 # Отправляем ping клиенту
                 await vad_connection_manager.send_text(session_id, "ping")
@@ -294,6 +310,17 @@ async def websocket_button_endpoint(websocket: WebSocket):
     # Сохраняем информацию о пользователе
     await button_connection_manager.set_property(session_id, 'user_id', user_id)
     await button_connection_manager.set_property(session_id, 'is_authenticated', is_authenticated)
+    
+    # Проверяем баланс при подключении
+    if user_id:
+        from database import db_handler
+        remaining_seconds = await db_handler.get_remaining_seconds(user_id)
+        if remaining_seconds <= 0:
+            await button_connection_manager.send_text(session_id, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+            await button_connection_manager.disconnect(session_id)
+            await websocket.close(code=1008, reason="Access denied - no remaining time")
+            return
+    
     logger.info(f'New connection! Total users: {len(button_connection_manager.connections)}')
     await button_connection_manager.send_text(session_id, f'CONNECTED:{session_id}')
     await button_connection_manager.send_text(session_id, 'Успешно подключено')
@@ -308,7 +335,7 @@ async def websocket_button_endpoint(websocket: WebSocket):
             try:
                 message = await asyncio.wait_for(
                     websocket.receive_text(),
-                    timeout=10
+                    timeout=5
                 )
                 if message == "ping":
                     await button_connection_manager.ping(session_id)

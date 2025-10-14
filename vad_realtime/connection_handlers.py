@@ -50,8 +50,8 @@ class ConnectionManager:
                 'current_request_id': None,  # ID текущего запроса
                 'user_id': None,  # ID пользователя для вычета времени
                 'is_authenticated': False,  # Статус авторизации
-                'last_ping': time.time(),  # Время последнего ping
-                'ping_timeout': 30  # Таймаут ping в секундах
+            'last_ping': time.time(),  # Время последнего ping
+            'ping_timeout': 10  # Таймаут ping в секундах (2 попытки по 5 сек)
             }
 
     async def set_llm_task(self, client_ip: str, task):
@@ -162,6 +162,12 @@ class ConnectionManager:
         """Отправляет pong ответ клиенту"""
         await self.send_text(client_ip, "pong")
 
+    async def update_activity(self, client_ip: str):
+        """Обновляет время последней активности соединения"""
+        async with self.lock:
+            if client_ip in self.connections:
+                self.connections[client_ip]['last_ping'] = time.time()
+
     async def cleanup_stale_connections(self):
         """Очищает неактивные соединения"""
         current_time = time.time()
@@ -229,6 +235,9 @@ async def calculate_and_deduct_time_for_request(connection_manager, client_ip, r
         if client_ip in connection_manager.connections:
             if remaining_seconds <= 0:
                 await connection_manager.send_text(client_ip, "<b>Минут осталось:</b> 0")
+                # Принудительно отключаем соединение с ошибкой "доступ запрещен"
+                await connection_manager.send_text(client_ip, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+                await connection_manager.disconnect(client_ip)
             else:
                 await connection_manager.send_text(client_ip, f"<b>Минут осталось:</b> {remaining_minutes}")
 
@@ -264,6 +273,9 @@ async def calculate_and_deduct_time(connection_manager, client_ip):
         if client_ip in connection_manager.connections:
             if remaining_seconds <= 0:
                 await connection_manager.send_text(client_ip, "<b>Минут осталось:</b> 0")
+                # Принудительно отключаем соединение с ошибкой "доступ запрещен"
+                await connection_manager.send_text(client_ip, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+                await connection_manager.disconnect(client_ip)
             else:
                 await connection_manager.send_text(client_ip, f"<b>Минут осталось:</b> {remaining_minutes}")
         

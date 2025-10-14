@@ -17,6 +17,9 @@ async def process_audio_chunk(connection_manager, client_ip: str, chunk: bytes):
     Обрабатывает аудио-чанк
     """
     connection = connection_manager.connections[client_ip]
+    
+    # НЕ блокируем при обработке - даем возможность договорить текущее сообщение
+    
     detected = await detect_voice(chunk)
     if detected:
         if not connection['is_recording']:

@@ -107,7 +107,7 @@ def create_app() -> FastAPI:
         
         async def cleanup_task():
             while True:
-                await asyncio.sleep(60)  # Проверяем каждую минуту
+                await asyncio.sleep(30)  # Проверяем каждые 30 секунд
                 try:
                     await vad_connection_manager.cleanup_stale_connections()
                     await button_connection_manager.cleanup_stale_connections()

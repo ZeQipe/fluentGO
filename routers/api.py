@@ -11,6 +11,7 @@ import json
 import uuid
 from pydantic import BaseModel
 from typing import Optional, List
+from routers.websocket import get_user_id_from_cookies
 
 # Импорты для Button Realtime
 from button_realtime.transcribation_utils import save_and_process_audio
@@ -22,8 +23,20 @@ JWT_SECRET_KEY = os.getenv("JWT_secret")
 router = APIRouter()
 
 @router.get("/session-id")
-async def get_session_id():
+async def get_session_id(request: Request):
     """Получение уникального ID сессии для WebSocket соединения"""
+    # Получаем user_id из JWT токена в куки
+    user_id, is_authenticated = await get_user_id_from_cookies(request)
+    
+    # Если авторизован - проверяем баланс
+    if user_id and is_authenticated:
+        remaining_seconds = await db_handler.get_remaining_seconds(user_id)
+        if remaining_seconds <= 0:
+            raise HTTPException(
+                status_code=403,
+                detail="Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс."
+            )
+    
     session_id = str(uuid.uuid4())
     return {"session_id": session_id}
 
@@ -540,7 +553,7 @@ async def upload_audio(file: UploadFile, request: Request, session_id: str = For
             detail=f"WebSocket connection not found for session_id: {session_id}. Ensure WebSocket is connected first."
         )
     
-    # Проверяем оставшееся время перед обработкой
+    # Проверяем оставшееся время перед обработкой (только для HTTP - предотвращаем загрузку файлов)
     user_id = await button_connection_manager.get_property(session_id, 'user_id')
     if user_id:
         remaining_seconds = await db_handler.get_remaining_seconds(user_id)

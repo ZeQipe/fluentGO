@@ -17,5 +17,11 @@ Do I need special equipment?
 Any device with a microphone and internet connection is sufficient. For better quality, we recommend headphones or a headset.
 
 Voice assistant settings?
-You can choose one of the available languages, assistant response length, and select a topic for conversation. All these settings are available only after authorization.
+You can choose one of the available voices, assistant response length and select a topic for conversation. All these settings are available only after authorization.
 
+What problems can arise in the work of an AIassistant?
+The AI assistant can make mistakes and is always intraining mode. Therefore, if you encounter any problems(incorrect response, lack of response, delays, languagechange during the conversation, etc.), please repeat yourquestion to the AI assistant.
+ 
+How do I make sure that the phone screen does notturn off when speaking?
+This service cannot affect your device settings and cannotdisable the automatic screen lock of your device. Todisable the automatic screen lock on your device, you need to do this in the settings of your device (phone,tablet).
+ 
