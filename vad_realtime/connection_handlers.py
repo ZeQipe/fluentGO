@@ -233,13 +233,17 @@ async def calculate_and_deduct_time_for_request(connection_manager, client_ip, r
         
         # Отправляем информацию на фронт (только если соединение активно)
         if client_ip in connection_manager.connections:
-            if remaining_seconds <= 0:
-                await connection_manager.send_text(client_ip, "<b>Минут осталось:</b> 0")
-                # Принудительно отключаем соединение с ошибкой "доступ запрещен"
-                await connection_manager.send_text(client_ip, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
-                await connection_manager.disconnect(client_ip)
-            else:
-                await connection_manager.send_text(client_ip, f"<b>Минут осталось:</b> {remaining_minutes}")
+            try:
+                if remaining_seconds <= 0:
+                    await connection_manager.send_text(client_ip, "<b>Минут осталось:</b> 0")
+                    # Принудительно отключаем соединение с ошибкой "доступ запрещен"
+                    await connection_manager.send_text(client_ip, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+                    await connection_manager.disconnect(client_ip)
+                else:
+                    await connection_manager.send_text(client_ip, f"<b>Минут осталось:</b> {remaining_minutes}")
+            except Exception as e:
+                # Игнорируем ошибки отправки сообщений (соединение может быть уже закрыто)
+                pass
 
 async def calculate_and_deduct_time(connection_manager, client_ip):
     """Старая функция для совместимости с Button режимом"""
@@ -271,13 +275,17 @@ async def calculate_and_deduct_time(connection_manager, client_ip):
         
         # Отправляем информацию на фронт (только если соединение активно)
         if client_ip in connection_manager.connections:
-            if remaining_seconds <= 0:
-                await connection_manager.send_text(client_ip, "<b>Минут осталось:</b> 0")
-                # Принудительно отключаем соединение с ошибкой "доступ запрещен"
-                await connection_manager.send_text(client_ip, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
-                await connection_manager.disconnect(client_ip)
-            else:
-                await connection_manager.send_text(client_ip, f"<b>Минут осталось:</b> {remaining_minutes}")
+            try:
+                if remaining_seconds <= 0:
+                    await connection_manager.send_text(client_ip, "<b>Минут осталось:</b> 0")
+                    # Принудительно отключаем соединение с ошибкой "доступ запрещен"
+                    await connection_manager.send_text(client_ip, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+                    await connection_manager.disconnect(client_ip)
+                else:
+                    await connection_manager.send_text(client_ip, f"<b>Минут осталось:</b> {remaining_minutes}")
+            except Exception as e:
+                # Игнорируем ошибки отправки сообщений (соединение может быть уже закрыто)
+                pass
         
         # Сбрасываем счетчики
         connection['voice_duration'] = 0

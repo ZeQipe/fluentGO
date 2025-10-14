@@ -28,14 +28,26 @@ async def get_session_id(request: Request):
     # Получаем user_id из JWT токена в куки
     user_id, is_authenticated = await get_user_id_from_cookies(request)
     
-    # Если авторизован - проверяем баланс
-    if user_id and is_authenticated:
-        remaining_seconds = await db_handler.get_remaining_seconds(user_id)
-        if remaining_seconds <= 0:
-            raise HTTPException(
-                status_code=403,
-                detail="Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс."
-            )
+    # Если неавторизован - проверяем существующий аккаунт по IP
+    if not user_id:
+        from database import db_handler
+        client_ip_address = request.client.host
+        user_id = f"user_{client_ip_address.replace('.', '_')}"
+        
+        # Проверяем существует ли пользователь
+        user = await db_handler.get_user(user_id)
+        if not user:
+            # Аккаунт не существует - разрешаем подключение (создастся при WebSocket)
+            session_id = str(uuid.uuid4())
+            return {"session_id": session_id}
+    
+    # Проверяем баланс для существующих пользователей
+    remaining_seconds = await db_handler.get_remaining_seconds(user_id)
+    if remaining_seconds <= 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс."
+        )
     
     session_id = str(uuid.uuid4())
     return {"session_id": session_id}

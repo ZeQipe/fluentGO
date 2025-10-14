@@ -121,8 +121,8 @@ async def websocket_endpoint(websocket: WebSocket):
         remaining_seconds = await db_handler.get_remaining_seconds(user_id)
         if remaining_seconds <= 0:
             await vad_connection_manager.send_text(session_id, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
-            await vad_connection_manager.disconnect(session_id)
             await websocket.close(code=1008, reason="Access denied - no remaining time")
+            await vad_connection_manager.disconnect(session_id)
             return
 
     logger.info(f'New connection! Total users: {len(vad_connection_manager.connections)}')
@@ -319,8 +319,8 @@ async def websocket_button_endpoint(websocket: WebSocket):
         remaining_seconds = await db_handler.get_remaining_seconds(user_id)
         if remaining_seconds <= 0:
             await button_connection_manager.send_text(session_id, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
-            await button_connection_manager.disconnect(session_id)
             await websocket.close(code=1008, reason="Access denied - no remaining time")
+            await button_connection_manager.disconnect(session_id)
             return
     
     logger.info(f'New connection! Total users: {len(button_connection_manager.connections)}')
