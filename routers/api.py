@@ -405,6 +405,33 @@ async def get_language(request: Request):
     
     return {"language": language}
 
+@router.put("/language")
+async def set_language(response: Response, language: str):
+    """Установка языка в куки"""
+    # Список поддерживаемых языков
+    supported_languages = ["en", "ru", "es", "fr", "de", "it", "pt", "zh", "ja", "ko"]
+    
+    # Проверяем, что язык поддерживается
+    if language not in supported_languages:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неподдерживаемый язык. Доступные языки: {', '.join(supported_languages)}"
+        )
+    
+    # Устанавливаем куку с языком
+    response.set_cookie(
+        key="language",
+        value=language,
+        max_age=365 * 24 * 60 * 60,  # 1 год
+        httponly=False,
+        secure=False,  # Для разработки
+        samesite="lax",
+        domain=None,
+        path="/"
+    )
+    
+    return {"status": "success", "language": language}
+
 @router.get("/help")
 async def get_help():
     """Получение справочной информации из document/help_info.txt"""
