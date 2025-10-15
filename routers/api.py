@@ -609,7 +609,6 @@ async def upload_audio(file: UploadFile, request: Request, session_id: str = For
     
     # Получаем длительность аудио файла
     import wave
-    import os
     
     # Проверяем что файл существует и не пустой
     if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
