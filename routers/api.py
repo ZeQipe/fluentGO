@@ -30,7 +30,6 @@ async def get_session_id(request: Request):
     
     # Если неавторизован - проверяем существующий аккаунт по IP
     if not user_id:
-        from database import db_handler
         client_ip_address = request.client.host
         user_id = f"user_{client_ip_address.replace('.', '_')}"
         
