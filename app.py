@@ -4,9 +4,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import FileResponse, RedirectResponse
 from starlette.staticfiles import StaticFiles
 import os
+from dotenv import load_dotenv
 
 from database import db_handler
 from routers import api, websocket, crm
+
+load_dotenv()
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -64,6 +67,11 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def ensure_trailing_slash_for_dirs(request: Request, call_next):
         path = request.url.path
+        
+        # Убираем префикс из пути для проверки статических файлов
+        if server_prefix and path.startswith(server_prefix):
+            path = path[len(server_prefix):]
+        
         # не трогаем запросы к файлам
         if "." in os.path.basename(path):
             return await call_next(request)
@@ -75,18 +83,19 @@ def create_app() -> FastAPI:
             and not path.endswith("/")
         ):
             # ✅ сохраняем query при редиректе
-            new_url = request.url.replace(path=path + "/")  # query сохраняется автоматически
+            new_path = request.url.path + "/"
+            new_url = request.url.replace(path=new_path)  # query сохраняется автоматически
             return RedirectResponse(url=str(new_url), status_code=308)
 
         return await call_next(request)
     
     # Ассеты Next (JS/CSS/имиджи с хешами)
-    app.mount("/_next", StaticFiles(directory=os.path.join(OUT_DIR, "_next")), name="_next")
+    app.mount(f"{server_prefix}/_next", StaticFiles(directory=os.path.join(OUT_DIR, "_next")), name="_next")
 
     # Если у тебя есть собственная папка static/assets в out — можно смонтировать и её:
     assets_dir = os.path.join(OUT_DIR, "assets")
     if os.path.isdir(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+        app.mount(f"{server_prefix}/assets", StaticFiles(directory=assets_dir), name="assets")
     
     # Инициализация базы данных и VAD при запуске
     @app.on_event("startup")
@@ -117,12 +126,15 @@ def create_app() -> FastAPI:
         asyncio.create_task(cleanup_task())
         print("Фоновая задача очистки соединений запущена!")
     
-    # Подключение роутеров
-    app.include_router(api.router, prefix="/api", tags=["API"])
-    app.include_router(crm.router, prefix="/crm", tags=["CRM"])
-    app.include_router(websocket.router, tags=["WebSocket"])
+    # Получаем префикс из переменной окружения
+    server_prefix = os.getenv("SERVER_PREFIX", "")
+    
+    # Подключение роутеров с префиксом
+    app.include_router(api.router, prefix=f"{server_prefix}/api", tags=["API"])
+    app.include_router(crm.router, prefix=f"{server_prefix}/crm", tags=["CRM"])
+    app.include_router(websocket.router, prefix=server_prefix, tags=["WebSocket"])
 
-    @app.get("/{full_path:path}")
+    @app.get(f"{server_prefix}/{{full_path:path}}")
     async def serve_any(full_path: str):
         # сначала пытаемся отдать точный файл из out
         base = os.path.join(OUT_DIR, full_path.lstrip("/"))
