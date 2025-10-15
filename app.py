@@ -45,6 +45,9 @@ def try_serve(path: str) -> FileResponse | None:
 def create_app() -> FastAPI:
     """Создание и настройка FastAPI приложения"""
     
+    # Получаем префикс из переменной окружения
+    server_prefix = os.getenv("SERVER_PREFIX", "")
+    
     # Создаем папку temp при запуске приложения
     os.makedirs("temp", exist_ok=True)
     
@@ -125,9 +128,6 @@ def create_app() -> FastAPI:
         
         asyncio.create_task(cleanup_task())
         print("Фоновая задача очистки соединений запущена!")
-    
-    # Получаем префикс из переменной окружения
-    server_prefix = os.getenv("SERVER_PREFIX", "")
     
     # Подключение роутеров с префиксом
     app.include_router(api.router, prefix=f"{server_prefix}/api", tags=["API"])
