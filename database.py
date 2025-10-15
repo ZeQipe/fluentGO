@@ -167,8 +167,8 @@ class DatabaseHandler:
             {
                 "id": "demo_user",
                 "user_name": "demo_user",
-                "remaining_seconds": 0,       # Нет сгораемых
-                "permanent_seconds": 59940,   # 999 минут несгораемых (999 * 60)
+                "remaining_seconds": 0,        # 5 секунд сгораемых
+                "permanent_seconds": 5,       # Нет несгораемых
                 "email": "demo@fluentgo.com", 
                 "tariff": "free"
             }
