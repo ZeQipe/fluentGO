@@ -405,9 +405,13 @@ async def get_language(request: Request):
     
     return {"language": language}
 
+class LanguageRequest(BaseModel):
+    language: str
+
 @router.put("/language")
-async def set_language(response: Response, language: str):
+async def set_language(response: Response, request: LanguageRequest):
     """Установка языка в куки"""
+    language = request.language
     # Список поддерживаемых языков
     supported_languages = ["en", "ru", "es", "fr", "de", "it", "pt", "zh", "ja", "ko"]
     
