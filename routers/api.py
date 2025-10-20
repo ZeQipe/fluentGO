@@ -300,8 +300,14 @@ async def get_tariffs(request: Request):
             except:
                 pass  # Если токен невалидный, остаемся с free и user
         
-        # Определяем популярный тариф через SQL
-        popular_tariff = await get_most_popular_tariff()
+        # Определяем популярный тариф из файла тарифов (если задан)
+        popular_tariff = None
+        for t in tariffs_data:
+            # Поддержка двух вариантов разметки в JSON: popular=true или наличие popularLabel
+            if t.get("popular") is True or t.get("popularLabel"):
+                popular_tariff = t.get("tariff")
+                break
+        # Если в тарифах не отмечен популярный — не проставляем popularLabel вовсе
         
         # Формируем ответ на основе текущего тарифа
         result_tariffs = []
@@ -361,9 +367,9 @@ async def get_tariffs(request: Request):
                     tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
             
-            # Добавляем популярный лейбл
-            if tariff["tariff"] == popular_tariff:
-                tariff_copy["popularLabel"] = "Популярный"
+            # Добавляем популярный лейбл (только если тариф помечен популярным в JSON)
+            if popular_tariff and tariff["tariff"] == popular_tariff:
+                tariff_copy["popularLabel"] = "Popular"
             
             result_tariffs.append(tariff_copy)
         

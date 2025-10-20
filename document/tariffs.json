@@ -59,6 +59,8 @@
     "tariff": "pay-as-you-go",
     "buttonText": "Buy",
     "buttonType": "secondary",
+    "popular": true,
+    "popularLabel": "Popular",
     "disabled": false
   },
   {
