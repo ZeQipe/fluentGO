@@ -134,7 +134,7 @@
     "name": "PRO + Subscription",
     "price": "$14.5",
     "period": "/mo",
-    "statuses": ["vip", "partner"],
+    "statuses": ["vip"],
     "features": [
       {
         "text": "Unlimited conversations",
@@ -158,6 +158,31 @@
       }
     ],
     "tariff": "pro-plus",
+    "buttonText": "Start",
+    "buttonType": "secondary",
+    "disabled": false
+  },
+  {
+    "id": "Only cmo-subscription",
+    "name": "CMO Subscription",
+    "price": "$10",
+    "period": "/mo",
+    "statuses": ["CMO"],
+    "features": [
+      {
+        "text": "All topics and scenarios",
+        "included": true
+      },
+      {
+        "text": "Real-time + voice messages",
+        "included": true
+      },
+      {
+        "text": "Priority support",
+        "included": true
+      }
+    ],
+    "tariff": "cmo",
     "buttonText": "Start",
     "buttonType": "secondary",
     "disabled": false

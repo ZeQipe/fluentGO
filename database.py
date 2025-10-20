@@ -154,7 +154,8 @@ class DatabaseHandler:
                 "remaining_seconds": 7200,    # 120 минут сгораемых (120 * 60)
                 "permanent_seconds": 2700,    # 45 минут несгораемых (45 * 60)
                 "email": "test1@example.com",
-                "tariff": "standart"
+                "tariff": "standart",
+                "status": "vip"
             },
             {
                 "id": "dany",
@@ -170,7 +171,8 @@ class DatabaseHandler:
                 "remaining_seconds": 0,        # 5 секунд сгораемых
                 "permanent_seconds": 5,       # Нет несгораемых
                 "email": "demo@fluentgo.com", 
-                "tariff": "free"
+                "tariff": "free",
+                "status": "CMO"
             }
         ]
         
@@ -189,7 +191,7 @@ class DatabaseHandler:
                         # Обновляем существующего пользователя
                         await db.execute(
                             "UPDATE users SET user_name = ?, remaining_seconds = ?, permanent_seconds = ?, email = ?, tariff = ?, payment_status = ?, status = ? WHERE id = ?",
-                            (user_data["user_name"], user_seconds, permanent_seconds, user_data["email"], user_data["tariff"], "active", "user", user_id)
+                            (user_data["user_name"], user_seconds, permanent_seconds, user_data["email"], user_data["tariff"], "active", user_data.get("status", "user"), user_id)
                         )
                         logger.info(f"Пользователь {user_id} обновлен: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
                     else:
@@ -197,7 +199,7 @@ class DatabaseHandler:
                         await db.execute("""
                             INSERT INTO users (id, user_name, remaining_seconds, permanent_seconds, iat, exp, email, tariff, payment_date, payment_status, status)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (user_id, user_data["user_name"], user_seconds, permanent_seconds, None, None, user_data["email"], user_data["tariff"], None, "active", "user"))
+                        """, (user_id, user_data["user_name"], user_seconds, permanent_seconds, None, None, user_data["email"], user_data["tariff"], None, "active", user_data.get("status", "user")))
                         logger.info(f"Пользователь {user_id} создан: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
                 
                 await db.commit()
