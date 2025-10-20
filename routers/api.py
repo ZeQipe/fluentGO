@@ -322,25 +322,25 @@ async def get_tariffs(request: Request):
             # Логика для Free тарифа
             if current_user_tariff == "free":
                 if tariff["tariff"] == "free":
-                    tariff_copy["buttonText"] = "Текущий"
+                    tariff_copy["buttonText"] = "Current"
                     tariff_copy["buttonType"] = "standard"
                 elif tariff["tariff"] == "pay-as-you-go":
-                    tariff_copy["buttonText"] = "Купить"
+                    tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
                 else:  # Подписки
-                    tariff_copy["buttonText"] = "Начать"
+                    tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
             
             # Логика для Pay-as-you-go (работает как Free, но показывает все тарифы)
             elif current_user_tariff == "pay-as-you-go":
                 if tariff["tariff"] == "free":
-                    tariff_copy["buttonText"] = "Бесплатный"
+                    tariff_copy["buttonText"] = "Free"
                     tariff_copy["buttonType"] = "secondary"
                 elif tariff["tariff"] == "pay-as-you-go":
-                    tariff_copy["buttonText"] = "Купить"
+                    tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
                 else:  # Подписки
-                    tariff_copy["buttonText"] = "Начать"
+                    tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
             
             # Логика для подписок (standart, pro)
@@ -350,15 +350,15 @@ async def get_tariffs(request: Request):
                     continue
                 
                 if tariff["tariff"] == "pay-as-you-go":
-                    tariff_copy["buttonText"] = "Купить"
+                    tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
                 elif tariff["tariff"] == current_user_tariff:
                     # Текущая подписка
-                    tariff_copy["buttonText"] = "Отменить подписку"
+                    tariff_copy["buttonText"] = "Cancel subscription"
                     tariff_copy["buttonType"] = "standard"
                 else:
                     # Другие подписки
-                    tariff_copy["buttonText"] = "Начать"
+                    tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
             
             # Добавляем популярный лейбл
@@ -404,6 +404,32 @@ async def get_language(request: Request):
     language = request.cookies.get("language", "en")
     
     return {"language": language}
+
+@router.get("/language/settings")
+async def get_language_settings():
+    """Получение списка поддерживаемых языков"""
+    try:
+        # Получаем языки из переменной окружения
+        languages_str = os.getenv("SUPPORTED_LANGUAGES", "ru,en,fr,it,es,de")
+        
+        # Разбиваем строку на массив
+        languages = [lang.strip() for lang in languages_str.split(",") if lang.strip()]
+        
+        # Если массив пустой, используем значения по умолчанию
+        if not languages:
+            languages = ["ru", "en", "fr", "it", "es", "de"]
+        
+        return {
+            "status": "success",
+            "languages": languages
+        }
+        
+    except Exception as e:
+        # При ошибке возвращаем языки по умолчанию
+        return {
+            "status": "success", 
+            "languages": ["ru", "en", "fr", "it", "es", "de"]
+        }
 
 class LanguageRequest(BaseModel):
     language: str
@@ -842,30 +868,113 @@ async def create_topic(request: Request, topic_data: TopicRequest):
 async def get_user_topics(request: Request):
     """Получение всех тем пользователя"""
     try:
-        # Получаем JWT токен из куков
+        # 1. Читаем базовые темы из файла
+        base_topics = await get_base_topics_from_file()
+        
+        # 2. Получаем JWT токен из куков
         token = request.cookies.get("auth_token_jwt")
-        if not token:
-            raise HTTPException(status_code=401, detail="Токен не найден")
+        user_topics = []
         
-        # Проверяем токен и получаем данные пользователя
-        user_data = await JWTService.verify_user_from_token(token)
-        if not user_data:
-            raise HTTPException(status_code=401, detail="Недействительный токен")
+        # 3. Если авторизован - получаем темы из БД
+        if token:
+            user_data = await JWTService.verify_user_from_token(token)
+            if user_data:
+                user_id = user_data["id"]
+                result = await topic_handler.get_user_topics(user_id)
+                if result["status"] == "success":
+                    # Добавляем base: false к пользовательским темам
+                    for topic in result["topics"]:
+                        topic["base"] = False
+                    user_topics = result["topics"]
         
-        user_id = user_data["id"]
+        # 4. Генерируем уникальные ID для базовых тем
+        used_ids = {topic["id"] for topic in user_topics}
+        base_topics_with_ids = await assign_unique_ids_to_base_topics(base_topics, used_ids)
         
-        # Получаем темы через интерфейсный слой
-        result = await topic_handler.get_user_topics(user_id)
+        # 5. Объединяем все темы
+        all_topics = user_topics + base_topics_with_ids
         
-        if result["status"] == "success":
-            return result
-        else:
-            return {"status": "error", "detail": result["message"]}
+        return {
+            "status": "success",
+            "topics": all_topics
+        }
             
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения тем: {str(e)}")
+
+async def get_base_topics_from_file():
+    """Получение базовых тем из файла без ID"""
+    try:
+        # Читаем файл с темами
+        with open("document/default_topics.txt", "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # Парсим по блокам (разделитель - две пустые строки)
+        blocks = content.strip().split("\n\n")
+        
+        base_topics = []
+        for block in blocks[:6]:  # Берем только первые 6 тем
+            lines = block.strip().split("\n", 1)  # Разделяем на заголовок и описание
+            if len(lines) == 2:
+                base_topics.append({
+                    "title": lines[0].strip(),
+                    "description": lines[1].strip(),
+                    "base": True
+                })
+            elif len(lines) == 1:
+                # Если только заголовок без описания
+                base_topics.append({
+                    "title": lines[0].strip(),
+                    "description": "",
+                    "base": True
+                })
+        
+        return base_topics
+        
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        return []
+
+async def assign_unique_ids_to_base_topics(base_topics, used_ids):
+    """Присваиваем уникальные ID базовым темам, заполняя пропуски в ID пользовательских тем"""
+    base_topics_with_ids = []
+    
+    # Сортируем занятые ID для поиска пропусков
+    sorted_used_ids = sorted(used_ids)
+    
+    # Находим все свободные ID (пропуски)
+    free_ids = []
+    if sorted_used_ids:
+        # Проверяем пропуски между существующими ID
+        for i in range(len(sorted_used_ids) - 1):
+            current_id = sorted_used_ids[i]
+            next_id = sorted_used_ids[i + 1]
+            # Добавляем все ID между current_id и next_id
+            for free_id in range(current_id + 1, next_id):
+                free_ids.append(free_id)
+        
+        # Добавляем ID после последнего занятого
+        last_used_id = sorted_used_ids[-1]
+        for free_id in range(last_used_id + 1, last_used_id + 1 + len(base_topics)):
+            free_ids.append(free_id)
+    else:
+        # Если нет занятых ID, начинаем с 1
+        free_ids = list(range(1, len(base_topics) + 1))
+    
+    # Присваиваем свободные ID базовым темам
+    for i, topic in enumerate(base_topics):
+        if i < len(free_ids):
+            topic_with_id = topic.copy()
+            topic_with_id["id"] = free_ids[i]
+            base_topics_with_ids.append(topic_with_id)
+        else:
+            # Если не хватает свободных ID, генерируем новые
+            topic_with_id = topic.copy()
+            topic_with_id["id"] = max(used_ids) + i + 1 if used_ids else i + 1
+            base_topics_with_ids.append(topic_with_id)
+    
+    return base_topics_with_ids
 
 @router.put("/topics")
 async def update_topic(request: Request, topic_data: TopicUpdateRequest):
