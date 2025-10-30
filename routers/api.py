@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, Response, UploadFile, Form
+from fastapi.responses import FileResponse
 from database import db_handler, minutes_to_seconds, topic_handler
 from services.jwt_service import JWTService
 from services.payment_service import payment_service
@@ -407,7 +408,7 @@ async def get_most_popular_tariff():
 async def get_language(request: Request):
     """Получение текущего языка из куков"""
     # Получаем язык из куков, если нет - возвращаем "en" по умолчанию
-    language = request.cookies.get("language", "en")
+    language = request.cookies.get("iec_preferred_locale", "en")
     
     return {"language": language}
 
@@ -456,7 +457,7 @@ async def set_language(response: Response, request: LanguageRequest):
     
     # Устанавливаем куку с языком
     response.set_cookie(
-        key="language",
+        key="iec_preferred_locale",
         value=language,
         max_age=365 * 24 * 60 * 60,  # 1 год
         httponly=False,
@@ -467,6 +468,20 @@ async def set_language(response: Response, request: LanguageRequest):
     )
     
     return {"status": "success", "language": language}
+
+@router.delete("/language")
+async def delete_language(response: Response):
+    """Удаление куки с языком"""
+    response.delete_cookie(
+        key="iec_preferred_locale",
+        httponly=False,
+        secure=False,
+        samesite="lax",
+        domain=None,
+        path="/"
+    )
+    
+    return {"status": "success", "message": "Язык сброшен"}
 
 @router.get("/help")
 async def get_help():
@@ -1088,6 +1103,20 @@ async def refuse_subscription(request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка отмены подписки: {str(e)}")
+
+@router.get("/doc/policy/")
+async def get_policy_document():
+    """Получение PDF документа с политикой конфиденциальности"""
+    file_path = "document/Fluent Terms of Service.pdf"
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename="Fluent_Terms_of_Service.pdf"
+    )
 
 # CRM роуты (будут перенесены в отдельный файл)
 
