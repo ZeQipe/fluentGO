@@ -1044,6 +1044,51 @@ async def delete_topic(request: Request, topic_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка удаления темы: {str(e)}")
 
+@router.post("/subscription/refuse")
+async def refuse_subscription(request: Request):
+    """Отмена подписки пользователя"""
+    try:
+        # Получаем JWT токен из куков
+        token = request.cookies.get("auth_token_jwt")
+        if not token:
+            raise HTTPException(status_code=401, detail="Токен не найден")
+        
+        # Проверяем токен и получаем данные пользователя
+        user_data = await JWTService.verify_user_from_token(token)
+        if not user_data:
+            raise HTTPException(status_code=401, detail="Недействительный токен")
+        
+        user_id = user_data["id"]
+        
+        # Получаем текущую подписку пользователя
+        user = await db_handler.get_user(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        
+        current_tariff = user.get("tariff", "free")
+        
+        # Отменяем подписку и устанавливаем free тариф
+        success = await db_handler.update_user(
+            user_id=user_id,
+            tariff="free",
+            payment_status="cancelled"
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Не удалось отменить подписку")
+        
+        return {
+            "status": "success",
+            "message": "Подписка успешно отменена",
+            "previous_tariff": current_tariff,
+            "current_tariff": "free"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка отмены подписки: {str(e)}")
+
 # CRM роуты (будут перенесены в отдельный файл)
 
 
