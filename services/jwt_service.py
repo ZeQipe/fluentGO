@@ -77,8 +77,15 @@ class JWTService:
         
         # Обновляем данные пользователя из токена (если есть)
         updates = {}
+        
+        # Проверяем имя пользователя (различные варианты ключей)
         if 'user_name' in payload:
             updates['user_name'] = payload['user_name']
+        elif 'name' in payload:
+            updates['user_name'] = payload['name']
+        elif 'username' in payload:
+            updates['user_name'] = payload['username']
+        
         if 'email' in payload:
             updates['email'] = payload['email']
         if 'iat' in payload:
