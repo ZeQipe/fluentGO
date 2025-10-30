@@ -545,14 +545,17 @@ async def login(response: Response, login: str, password: str):
                 "message": f"Пользователь {login} не найден в БД"
             }
         
-        # Создаем JWT токен
+        # Создаем JWT токен с вложенной структурой data (как у внешней системы)
         current_time = int(time.time())
         payload = {
-            "user_id": user["id"],
-            "user_name": user["user_name"],
-            "email": user["email"],
+            "iss": "https://fluentgo.ai",
             "iat": current_time,
-            "exp": current_time + (24 * 60 * 60)  # Токен на 24 часа
+            "exp": current_time + (24 * 60 * 60),  # Токен на 24 часа
+            "data": {
+                "user_id": user["id"],
+                "email": user["email"],
+                "name": user["user_name"]
+            }
         }
         
         token = jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")

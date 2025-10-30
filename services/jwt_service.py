@@ -36,17 +36,23 @@ class JWTService:
         if not payload:
             return None
         
+        # Получаем данные из вложенного объекта data (если есть) или из корня
+        data = payload.get('data', payload)
+        
         # Получаем user_id из токена
-        user_id = payload.get('user_id') or payload.get('sub')
+        user_id = data.get('user_id') or payload.get('sub')
         if not user_id:
             return None
+        
+        # Преобразуем user_id в строку (если пришел как число)
+        user_id = str(user_id)
         
         # Получаем пользователя из БД
         user = await db_handler.get_user(user_id)
         if not user:
             # Пользователя нет в БД - создаем нового с базовыми настройками
-            user_name = payload.get('name') or payload.get('username') or f"user_{user_id}"
-            email = payload.get('email')
+            user_name = data.get('name') or data.get('username') or f"user_{user_id}"
+            email = data.get('email')
             iat = payload.get('iat')
             exp = payload.get('exp')
             
@@ -79,15 +85,15 @@ class JWTService:
         updates = {}
         
         # Проверяем имя пользователя (различные варианты ключей)
-        if 'user_name' in payload:
-            updates['user_name'] = payload['user_name']
-        elif 'name' in payload:
-            updates['user_name'] = payload['name']
-        elif 'username' in payload:
-            updates['user_name'] = payload['username']
+        if 'user_name' in data:
+            updates['user_name'] = data['user_name']
+        elif 'name' in data:
+            updates['user_name'] = data['name']
+        elif 'username' in data:
+            updates['user_name'] = data['username']
         
-        if 'email' in payload:
-            updates['email'] = payload['email']
+        if 'email' in data:
+            updates['email'] = data['email']
         if 'iat' in payload:
             updates['iat'] = payload['iat']
         if 'exp' in payload:
