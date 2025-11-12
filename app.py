@@ -132,7 +132,11 @@ def create_app() -> FastAPI:
     # Подключение роутеров с префиксом
     app.include_router(api.router, prefix=f"{server_prefix}/api", tags=["API"])
     app.include_router(crm.router, prefix=f"{server_prefix}/crm", tags=["CRM"])
-    app.include_router(websocket.router, prefix=server_prefix, tags=["WebSocket"])
+    
+    # WebSocket роуты регистрируем явно на уровне app
+    from routers.websocket import websocket_endpoint, websocket_button_endpoint
+    app.add_websocket_route(f"{server_prefix}/ws", websocket_endpoint)
+    app.add_websocket_route(f"{server_prefix}/ws-button", websocket_button_endpoint)
 
     @app.get(f"{server_prefix}/{{full_path:path}}")
     async def serve_any(full_path: str):
