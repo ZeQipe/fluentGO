@@ -4,12 +4,28 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import FileResponse, RedirectResponse
 from starlette.staticfiles import StaticFiles
 import os
+import json
 from dotenv import load_dotenv
 
 from database import db_handler
 from routers import api, websocket, crm
 
 load_dotenv()
+
+# ========================================
+# Поддерживаемые языки для роутинга (из .env)
+# ========================================
+def get_supported_languages():
+    """Получить список поддерживаемых языков из .env"""
+    langs_str = os.getenv("SUPPORTED_LANGUAGES", '["ru","en","fr","it","es","de"]')
+    try:
+        # Пробуем распарсить как JSON
+        return json.loads(langs_str)
+    except json.JSONDecodeError:
+        # Если не JSON, пробуем через запятую
+        return [lang.strip() for lang in langs_str.split(",")]
+
+SUPPORTED_LANGUAGES = get_supported_languages()
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -75,17 +91,27 @@ def create_app() -> FastAPI:
         if server_prefix and path.startswith(server_prefix):
             path = path[len(server_prefix):]
         
+        # Убираем языковой префикс для проверки файлов
+        path_for_file_check = path
+        
+        if path:
+            segments = path.lstrip("/").split("/")
+            if segments and segments[0] in SUPPORTED_LANGUAGES:
+                # Убираем языковой префикс для проверки файловой системы
+                path_for_file_check = "/" + "/".join(segments[1:]) if len(segments) > 1 else "/"
+        
         # не трогаем запросы к файлам
         if "." in os.path.basename(path):
             return await call_next(request)
 
-        candidate_dir = os.path.join(OUT_DIR, path.lstrip("/"))
+        candidate_dir = os.path.join(OUT_DIR, path_for_file_check.lstrip("/"))
         if (
             os.path.isdir(candidate_dir)
             and os.path.isfile(os.path.join(candidate_dir, "index.html"))
-            and not path.endswith("/")
+            and not request.url.path.endswith("/")
         ):
             # ✅ сохраняем query при редиректе
+            # ✅ используем оригинальный path (с языковым префиксом)
             new_path = request.url.path + "/"
             new_url = request.url.replace(path=new_path)  # query сохраняется автоматически
             return RedirectResponse(url=str(new_url), status_code=308)
@@ -139,23 +165,59 @@ def create_app() -> FastAPI:
     app.add_websocket_route(f"{server_prefix}/ws-button", websocket_button_endpoint)
 
     @app.get(f"{server_prefix}/{{full_path:path}}")
-    async def serve_any(full_path: str):
+    async def serve_any(full_path: str, request: Request):
+        # Проверяем, начинается ли путь с языкового префикса
+        locale_to_set = None
+        path_without_locale = full_path
+        
+        if full_path:
+            # Разбиваем путь на сегменты
+            segments = full_path.lstrip("/").split("/")
+            if segments and segments[0] in SUPPORTED_LANGUAGES:
+                # Нашли языковой префикс
+                locale_to_set = segments[0]
+                # Убираем языковой префикс из пути
+                path_without_locale = "/".join(segments[1:])
+        
         # сначала пытаемся отдать точный файл из out
-        base = os.path.join(OUT_DIR, full_path.lstrip("/"))
+        base = os.path.join(OUT_DIR, path_without_locale.lstrip("/"))
         resp = try_serve(base)
         if resp:
+            # Если был языковой префикс - устанавливаем куку
+            if locale_to_set:
+                resp.set_cookie(
+                    key="iec_preferred_locale",
+                    value=locale_to_set,
+                    httponly=False,
+                    samesite="lax"
+                )
             return resp
 
         # 404.html если есть
         not_found = os.path.join(OUT_DIR, "404.html")
         if os.path.isfile(not_found):
-            return FileResponse(not_found, status_code=404)
+            resp = FileResponse(not_found, status_code=404)
+            if locale_to_set:
+                resp.set_cookie(
+                    key="iec_preferred_locale",
+                    value=locale_to_set,
+                    httponly=False,
+                    samesite="lax"
+                )
+            return resp
 
         # или index.html как общий fallback
         index = os.path.join(OUT_DIR, "index.html")
         if os.path.isfile(index):
-            # можно вернуть 200 или 404 в зависимости от предпочтений
-            return FileResponse(index, status_code=200)
+            resp = FileResponse(index, status_code=200)
+            if locale_to_set:
+                resp.set_cookie(
+                    key="iec_preferred_locale",
+                    value=locale_to_set,
+                    httponly=False,
+                    samesite="lax"
+                )
+            return resp
 
         return Response("Build is missing. Run next build.", status_code=500)
     

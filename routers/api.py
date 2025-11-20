@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse
 from database import db_handler, minutes_to_seconds, topic_handler
 from services.jwt_service import JWTService
 from services.payment_service import payment_service
+from services import payment_manager
 import jwt
 import os
 from dotenv import load_dotenv
@@ -10,6 +11,7 @@ import time
 import aiofiles
 import json
 import uuid
+import math
 from pydantic import BaseModel
 from typing import Optional, List
 from routers.websocket import get_user_id_from_cookies
@@ -69,6 +71,19 @@ class WebhookPaymentData(BaseModel):
     currency: str
     payment_method: str
     processed_at: int
+    # Для подписок: уникальный ID транзакции (защита от повторной обработки)
+    charge_id: Optional[str] = None
+    # custom_data поля встраиваются в корень по документации Airalo API
+    user_id: Optional[str] = None
+    product_name: Optional[str] = None
+    email: Optional[str] = None
+    minutes: Optional[int] = None
+    tariff_id: Optional[str] = None
+    subscription_months: Optional[int] = None
+
+class PurchaseSubscriptionRequest(BaseModel):
+    tariff_id: str
+    payment_system: str  # "yookassa" или "paypal"
 
 class TopicRequest(BaseModel):
     title: str
@@ -301,6 +316,22 @@ async def get_tariffs(request: Request):
             except:
                 pass  # Если токен невалидный, остаемся с free и user
         
+        # Проверяем локализацию и конвертируем цены в рубли если нужно
+        locale = request.cookies.get("iec_preferred_locale", "en")
+        exchange_rate = None
+        
+        if locale == "ru":
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.get("https://iec.study/wp-json/airalo/v1/exchange-rate-rub", timeout=5.0)
+                    if response.status_code == 200:
+                        rate_data = response.json()
+                        if rate_data.get("success") and rate_data.get("data"):
+                            exchange_rate = rate_data["data"].get("final_rate")
+            except:
+                pass  # Если не удалось получить курс, оставляем цены в долларах
+        
         # Определяем популярный тариф из файла тарифов (если задан)
         popular_tariff = None
         for t in tariffs_data:
@@ -325,6 +356,21 @@ async def get_tariffs(request: Request):
                 continue  # Пропускаем этот тариф
             
             tariff_copy = tariff.copy()
+            
+            # Конвертируем цену в рубли если локаль RU и есть курс
+            if exchange_rate and locale == "ru":
+                try:
+                    # Извлекаем числовое значение из строки типа "$15" или "$0"
+                    price_str = tariff_copy.get("price", "$0")
+                    price_usd = float(price_str.replace("$", "").strip())
+                    
+                    # Конвертируем в рубли и округляем вверх
+                    price_rub = math.ceil(price_usd * exchange_rate)
+                    
+                    # Заменяем цену на рублевый формат
+                    tariff_copy["price"] = f"{price_rub} ₽"
+                except:
+                    pass  # Если не удалось сконвертировать, оставляем исходную цену
             
             # Логика для Free тарифа
             if current_user_tariff == "free":
@@ -374,11 +420,18 @@ async def get_tariffs(request: Request):
             
             result_tariffs.append(tariff_copy)
         
-        return {
+        # Формируем ответ
+        response = {
             "status": "success",
             "tariffs": result_tariffs,
             "current_tariff": current_user_tariff
         }
+        
+        # Если локаль RU, но курс не получен - добавляем ошибку
+        if locale == "ru" and exchange_rate is None:
+            response["err"] = "не получены данные по текущему курсу"
+        
+        return response
         
     except Exception as e:
         return {
@@ -413,7 +466,7 @@ async def get_language(request: Request):
     return {"language": language}
 
 @router.get("/language/settings")
-async def get_language_settings():
+async def get_language_settings(request: Request):
     """Получение списка поддерживаемых языков"""
     try:
         # Получаем языки из переменной окружения
@@ -426,16 +479,22 @@ async def get_language_settings():
         if not languages:
             languages = ["ru", "en", "fr", "it", "es", "de"]
         
+        # Получаем текущий язык из куки
+        current_locale = request.cookies.get("iec_preferred_locale", "en")
+        
         return {
             "status": "success",
-            "languages": languages
+            "languages": languages,
+            "currentLocale": current_locale
         }
         
     except Exception as e:
         # При ошибке возвращаем языки по умолчанию
+        current_locale = request.cookies.get("iec_preferred_locale", "en")
         return {
             "status": "success", 
-            "languages": ["ru", "en", "fr", "it", "es", "de"]
+            "languages": ["ru", "en", "fr", "it", "es", "de"],
+            "currentLocale": current_locale
         }
 
 class LanguageRequest(BaseModel):
@@ -482,6 +541,44 @@ async def delete_language(response: Response):
     )
     
     return {"status": "success", "message": "Язык сброшен"}
+
+@router.get("/video")
+async def get_video():
+    """Получение ссылки на видео из document/media.txt"""
+    try:
+        media_file_path = os.path.join("document", "media.txt")
+        
+        # Проверяем существование файла
+        if not os.path.exists(media_file_path):
+            raise HTTPException(
+                status_code=500,
+                detail="Файл media.txt не найден"
+            )
+        
+        # Читаем первую строку из файла
+        async with aiofiles.open(media_file_path, 'r', encoding='utf-8') as f:
+            first_line = await f.readline()
+            video_url = first_line.strip()
+        
+        # Проверяем что ссылка не пустая
+        if not video_url:
+            raise HTTPException(
+                status_code=500,
+                detail="Ссылка на видео отсутствует"
+            )
+        
+        return {
+            "status": "success",
+            "videoUrl": video_url
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при чтении файла media.txt: {str(e)}"
+        )
 
 @router.get("/help")
 async def get_help():
@@ -798,62 +895,154 @@ async def get_payment_status(internal_order_id: str, request: Request):
 
 @router.post("/webhook/payment")
 async def webhook_payment(request: Request):
-    """Webhook для получения уведомлений о платежах"""
+    """
+    Webhook для получения уведомлений о платежах от Airalo API
     
-    # Проверяем авторизацию webhook (Bearer токен)
+    Airalo отправляет POST запрос с данными о завершенном платеже.
+    Мы автоматически начисляем минуты и обновляем тариф пользователя.
+    """
+    
+    # Проверяем авторизацию webhook (Bearer токен от Airalo)
     auth_header = request.headers.get("authorization")
     expected_token = os.getenv("WEBHOOK_AUTH_TOKEN")
     
     if expected_token and auth_header != f"Bearer {expected_token}":
+        payment_manager.log_payment("ERROR", "Неавторизованный webhook запрос", {
+            "auth_header": auth_header,
+            "ip": request.client.host if request.client else None
+        })
         raise HTTPException(status_code=401, detail="Unauthorized webhook")
     
     try:
         # Получаем данные webhook
         webhook_data = await request.json()
         
+        payment_manager.log_payment("INFO", "Получен webhook от Airalo API", {
+            "data": webhook_data
+        })
+        
         # Валидируем структуру данных
         try:
             payment_data = WebhookPaymentData(**webhook_data)
         except Exception as e:
+            payment_manager.log_payment("ERROR", f"Неверная структура webhook данных: {str(e)}", {
+                "data": webhook_data,
+                "exception": str(e)
+            })
             raise HTTPException(status_code=400, detail=f"Неверная структура данных: {str(e)}")
         
-        # Проверяем статус платежа
-        if payment_data.status != "SUCCESS":
-            return {"received": True, "message": "Payment not successful, ignoring"}
+        # Проверка на повторную обработку (idempotency)
+        # По документации @PAYPAL.md (строки 320, 358-361): "charge_id может повторяться"
+        # Для подписок каждое списание имеет уникальный charge_id
+        if payment_data.charge_id:
+            if payment_data.charge_id in payment_manager.processed_charge_ids:
+                payment_manager.log_payment("INFO", f"Webhook с charge_id {payment_data.charge_id} уже был обработан, пропускаем", {
+                    "charge_id": payment_data.charge_id,
+                    "payment_id": payment_data.external_order_id
+                })
+                return {
+                    "received": True, 
+                    "message": "Duplicate charge_id, already processed",
+                    "charge_id": payment_data.charge_id
+                }
         
-        # Обновляем данные пользователя в базе данных
+        # Проверяем статус платежа (по документации: SUCCESS для успешных)
+        if payment_data.status.upper() != "SUCCESS":
+            payment_manager.log_payment("INFO", f"Webhook со статусом {payment_data.status}, пропускаем", {
+                "payment_id": payment_data.external_order_id
+            })
+            return {"received": True, "message": f"Payment status: {payment_data.status}"}
+        
+        # Извлекаем данные из custom_data (они встроены в корень по документации)
         user_id = payment_data.user_id
-        minutes_to_add = payment_data.minutes_to_add
+        minutes = payment_data.minutes or 0
+        tariff_id = payment_data.tariff_id
+        
+        if not user_id:
+            payment_manager.log_payment("ERROR", "user_id отсутствует в webhook данных", {
+                "payment_id": payment_data.external_order_id
+            })
+            raise HTTPException(status_code=400, detail="user_id is required")
         
         # Получаем текущие данные пользователя
         user = await db_handler.get_user(user_id)
         if not user:
-            # Создаем пользователя если не существует
-            await db_handler.create_user(
-                user_id=user_id,
-                user_name=f"user_{user_id}",
-                remaining_seconds=minutes_to_seconds(minutes_to_add),  # Конвертируем минуты в секунды
-                email=None,
-                iat=None,
-                exp=None
-            )
-        else:
-            # Добавляем минуты к существующему балансу (используем новый метод)
-            await db_handler.add_minutes(user_id, minutes_to_add)
+            payment_manager.log_payment("ERROR", f"Пользователь {user_id} не найден", {
+                "payment_id": payment_data.external_order_id
+            })
+            return {
+                "received": True,
+                "error": "User not found",
+                "user_id": user_id
+            }
         
-        # Обновляем платежную информацию
-        await db_handler.update_user(
-            user_id=user_id,
-            tariff=payment_data.tariff_name,
-            payment_date=payment_data.processed_at,
-            payment_status="paid"
-        )
+        # Проверяем есть ли информация о платеже в нашем хранилище
+        payment_info = payment_manager.active_payments.get(payment_data.external_order_id)
+        
+        if payment_info:
+            # Есть в хранилище - определяем тип минут
+            is_permanent = payment_info.get("is_permanent", False)
+            
+            if is_permanent:
+                # Несгораемые минуты (для разовых покупок Buy)
+                new_permanent = user.get("permanent_seconds", 0) + (minutes * 60)
+                await db_handler.update_user(
+                    user_id=user_id,
+                    permanent_seconds=new_permanent,
+                    payment_status="active"
+                )
+                payment_manager.log_payment("INFO", f"Начислены несгораемые минуты через webhook", {
+                    "user_id": user_id,
+                    "minutes": minutes,
+                    "payment_id": payment_data.external_order_id
+                })
+            else:
+                # Сгораемые минуты (для подписок Start)
+                new_remaining = user.get("remaining_seconds", 0) + (minutes * 60)
+                await db_handler.update_user(
+                    user_id=user_id,
+                    remaining_seconds=new_remaining,
+                    tariff=tariff_id,
+                    payment_status="active"
+                )
+                payment_manager.log_payment("INFO", f"Начислены сгораемые минуты через webhook", {
+                    "user_id": user_id,
+                    "minutes": minutes,
+                    "tariff": tariff_id,
+                    "payment_id": payment_data.external_order_id
+                })
+            
+            # Удаляем из хранилища после успешной обработки
+            del payment_manager.active_payments[payment_data.external_order_id]
+            
+        else:
+            # Нет в хранилище - начисляем как несгораемые минуты (безопасный вариант)
+            payment_manager.log_payment("WARNING", f"Платеж не найден в хранилище, начисляем как несгораемые", {
+                "payment_id": payment_data.external_order_id,
+                "user_id": user_id
+            })
+            
+            new_permanent = user.get("permanent_seconds", 0) + (minutes * 60)
+            await db_handler.update_user(
+                user_id=user_id,
+                permanent_seconds=new_permanent,
+                payment_status="active"
+            )
+        
+        # Добавляем charge_id в обработанные (защита от повторов)
+        if payment_data.charge_id:
+            payment_manager.processed_charge_ids.add(payment_data.charge_id)
+            payment_manager.log_payment("INFO", f"charge_id {payment_data.charge_id} добавлен в обработанные", {
+                "charge_id": payment_data.charge_id,
+                "payment_id": payment_data.external_order_id
+            })
         
         return {
             "received": True,
             "message": "Payment processed successfully",
             "user_id": user_id,
-            "minutes_added": minutes_to_add
+            "minutes_added": minutes,
+            "payment_id": payment_data.external_order_id
         }
         
     except HTTPException:
@@ -1120,6 +1309,341 @@ async def get_policy_document():
         media_type="application/pdf",
         filename="Fluent_Terms_of_Service.pdf"
     )
+
+# ========================================
+# Новая система платежей через Airalo API
+# ========================================
+
+@router.post("/subscription/purchase")
+async def purchase_subscription(request: Request, data: PurchaseSubscriptionRequest):
+    """
+    Создание платежа для покупки тарифа
+    
+    Принимает:
+        - tariff_id: ID тарифа из tariffs.json
+        - payment_system: "yookassa" или "paypal"
+    
+    Возвращает:
+        - paymentUrl: URL для оплаты
+        - status: "await" (ожидание оплаты)
+        - paymentId: ID платежа для проверки статуса
+    """
+    try:
+        # 1. Проверяем авторизацию через JWT в куках
+        token = request.cookies.get("auth_token_jwt")
+        if not token:
+            raise HTTPException(status_code=401, detail="Пользователь не авторизован")
+        
+        user_data = await JWTService.verify_user_from_token(token)
+        if not user_data:
+            raise HTTPException(status_code=401, detail="Неверный токен авторизации")
+        
+        # Получаем полные данные пользователя из БД
+        user = await db_handler.get_user(user_data["id"])
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден в базе")
+        
+        # 2. Валидация payment_system
+        if data.payment_system not in ["yookassa", "paypal"]:
+            raise HTTPException(
+                status_code=400, 
+                detail="Некорректная платежная система. Допустимые значения: yookassa, paypal"
+            )
+        
+        # 3. Загружаем тарифы из файла
+        try:
+            with open("document/tariffs.json", "r", encoding="utf-8") as f:
+                tariffs_data = json.load(f)
+        except Exception as e:
+            payment_manager.log_payment("ERROR", f"Ошибка чтения tariffs.json: {str(e)}")
+            raise HTTPException(status_code=500, detail="Ошибка загрузки тарифов")
+        
+        # 4. Находим тариф по ID
+        tariff = None
+        for t in tariffs_data:
+            if t.get("id") == data.tariff_id or t.get("tariff") == data.tariff_id:
+                tariff = t
+                break
+        
+        if not tariff:
+            raise HTTPException(status_code=404, detail=f"Тариф {data.tariff_id} не найден")
+        
+        # 5. Получаем локаль из куки для определения валюты
+        locale = request.cookies.get("iec_preferred_locale", "en")
+        
+        # 6. Определяем тип платежа по тексту кнопки
+        button_text = tariff.get("buttonText", "").lower()
+        
+        if button_text == "buy":
+            # Разовая покупка (несгораемые минуты)
+            payment_manager.log_payment("INFO", f"Создание разового платежа для пользователя {user['id']}", {
+                "tariff_id": data.tariff_id,
+                "payment_system": data.payment_system,
+                "locale": locale
+            })
+            
+            result = await payment_manager.create_one_time_payment(
+                user_data=user,
+                tariff_data=tariff,
+                payment_system=data.payment_system,
+                locale=locale
+            )
+            
+        elif button_text == "start":
+            # Подписка (сгораемые минуты)
+            payment_manager.log_payment("INFO", f"Создание подписки для пользователя {user['id']}", {
+                "tariff_id": data.tariff_id,
+                "payment_system": data.payment_system,
+                "locale": locale
+            })
+            
+            result = await payment_manager.create_subscription_payment(
+                user_data=user,
+                tariff_data=tariff,
+                payment_system=data.payment_system,
+                locale=locale
+            )
+            
+        else:
+            # Неизвестный тип кнопки
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Неподдерживаемый тип тарифа (buttonText: {button_text}). Ожидается 'buy' или 'start'"
+            )
+        
+        # 7. Обрабатываем результат
+        if result.get("success"):
+            return {
+                "paymentUrl": result.get("payment_url"),
+                "status": "await",
+                "paymentId": result.get("payment_id")
+            }
+        else:
+            # Логируем ошибку (уже залогировано внутри функций)
+            raise HTTPException(
+                status_code=500, 
+                detail=result.get("error", "Не удалось создать платеж")
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        payment_manager.log_payment("ERROR", f"Исключение в /subscription/purchase: {str(e)}", {
+            "user_id": user_data.get("id") if 'user_data' in locals() else None,
+            "tariff_id": data.tariff_id,
+            "exception": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {str(e)}")
+
+
+@router.get("/subscription/payment-status")
+async def check_subscription_payment_status(request: Request, paymentId: str):
+    """
+    Проверка статуса платежа
+    
+    Параметры:
+        - paymentId: ID платежа полученный при создании
+    
+    Возвращает:
+        - status: "await" | "success" | "closed"
+    """
+    try:
+        if not paymentId:
+            raise HTTPException(status_code=400, detail="Параметр paymentId обязателен")
+        
+        # Проверяем статус платежа через Airalo API
+        result = await payment_manager.check_payment_status(paymentId)
+        
+        status = result.get("status")
+        payment_info = result.get("payment_info")
+        
+        # Если платеж успешен - обновляем данные пользователя
+        if status == "success" and payment_info:
+            try:
+                user_id = payment_info.get("user_id")
+                minutes_to_add = payment_info.get("minutes_to_add", 0)
+                is_permanent = payment_info.get("is_permanent", False)
+                tariff_id = payment_info.get("tariff_id")
+                
+                # Получаем текущие данные пользователя
+                user = await db_handler.get_user(user_id)
+                if user:
+                    # Определяем куда добавлять минуты
+                    if is_permanent:
+                        # Несгораемые минуты (для разовых покупок Buy)
+                        new_permanent = user.get("permanent_seconds", 0) + (minutes_to_add * 60)
+                        await db_handler.update_user(
+                            user_id=user_id,
+                            permanent_seconds=new_permanent
+                        )
+                        payment_manager.log_payment("INFO", f"Начислены несгораемые минуты пользователю {user_id}", {
+                            "minutes": minutes_to_add
+                        })
+                    else:
+                        # Сгораемые минуты (для подписок Start)
+                        new_remaining = user.get("remaining_seconds", 0) + (minutes_to_add * 60)
+                        await db_handler.update_user(
+                            user_id=user_id,
+                            remaining_seconds=new_remaining,
+                            tariff=tariff_id,
+                            payment_status="active"
+                        )
+                        payment_manager.log_payment("INFO", f"Начислены сгораемые минуты пользователю {user_id}", {
+                            "minutes": minutes_to_add,
+                            "tariff": tariff_id
+                        })
+                else:
+                    payment_manager.log_payment("ERROR", f"Пользователь {user_id} не найден при начислении минут")
+                    
+            except Exception as e:
+                payment_manager.log_payment("ERROR", f"Ошибка начисления минут: {str(e)}", {
+                    "payment_id": paymentId,
+                    "exception": str(e)
+                })
+        
+        return {"status": status}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        payment_manager.log_payment("ERROR", f"Ошибка проверки статуса платежа {paymentId}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка проверки статуса: {str(e)}")
+
+
+@router.get("/payment/success")
+async def payment_success_handler(
+    request: Request,
+    payment_id: Optional[str] = None,
+    paymentId: Optional[str] = None,
+    subscription_id: Optional[str] = None,
+    status: Optional[str] = None
+):
+    """
+    Обработка возврата пользователя после оплаты
+    
+    Параметры могут приходить в разных форматах от разных платежных систем:
+        - payment_id / paymentId / subscription_id: ID платежа
+        - status: статус от платежной системы (опционально)
+    
+    Автоматически проверяет статус и обновляет данные пользователя
+    """
+    try:
+        # Определяем ID платежа (разные системы могут передавать по-разному)
+        payment_identifier = payment_id or paymentId or subscription_id
+        
+        if not payment_identifier:
+            payment_manager.log_payment("WARNING", "Возврат на /payment/success без payment_id")
+            return {
+                "status": "error",
+                "message": "Payment ID not provided",
+                "redirect": "https://iec.study/fluent/"
+            }
+        
+        payment_manager.log_payment("INFO", f"Обработка возврата на /payment/success", {
+            "payment_id": payment_identifier,
+            "status_param": status,
+            "query_params": dict(request.query_params)
+        })
+        
+        # Проверяем статус платежа через наш API
+        result = await payment_manager.check_payment_status(payment_identifier)
+        
+        payment_status = result.get("status")
+        payment_info = result.get("payment_info")
+        
+        # Если платеж успешен - обновляем данные пользователя
+        if payment_status == "success" and payment_info:
+            try:
+                user_id = payment_info.get("user_id")
+                minutes_to_add = payment_info.get("minutes_to_add", 0)
+                is_permanent = payment_info.get("is_permanent", False)
+                tariff_id = payment_info.get("tariff_id")
+                
+                # Получаем текущие данные пользователя
+                user = await db_handler.get_user(user_id)
+                if user:
+                    # Определяем куда добавлять минуты
+                    if is_permanent:
+                        # Несгораемые минуты (для разовых покупок Buy)
+                        new_permanent = user.get("permanent_seconds", 0) + (minutes_to_add * 60)
+                        await db_handler.update_user(
+                            user_id=user_id,
+                            permanent_seconds=new_permanent
+                        )
+                        payment_manager.log_payment("INFO", f"Начислены несгораемые минуты пользователю {user_id}", {
+                            "minutes": minutes_to_add
+                        })
+                    else:
+                        # Сгораемые минуты (для подписок Start)
+                        new_remaining = user.get("remaining_seconds", 0) + (minutes_to_add * 60)
+                        await db_handler.update_user(
+                            user_id=user_id,
+                            remaining_seconds=new_remaining,
+                            tariff=tariff_id,
+                            payment_status="active"
+                        )
+                        payment_manager.log_payment("INFO", f"Начислены сгораемые минуты пользователю {user_id}", {
+                            "minutes": minutes_to_add,
+                            "tariff": tariff_id
+                        })
+                    
+                    # Успешно начислены минуты
+                    return {
+                        "status": "success",
+                        "message": "Payment processed successfully",
+                        "minutes_added": payment_info.get("minutes_to_add", 0),
+                        "redirect": "https://iec.study/fluent/"
+                    }
+                else:
+                    payment_manager.log_payment("ERROR", f"Пользователь {user_id} не найден при начислении минут")
+                    return {
+                        "status": "error",
+                        "message": "User not found",
+                        "redirect": "https://iec.study/fluent/"
+                    }
+                    
+            except Exception as e:
+                payment_manager.log_payment("ERROR", f"Ошибка начисления минут: {str(e)}", {
+                    "payment_id": payment_identifier,
+                    "exception": str(e)
+                })
+                return {
+                    "status": "error",
+                    "message": "Failed to process payment",
+                    "redirect": "https://iec.study/fluent/"
+                }
+        
+        elif payment_status == "await":
+            # Платеж еще обрабатывается
+            return {
+                "status": "pending",
+                "message": "Payment is being processed",
+                "payment_id": payment_identifier,
+                "redirect": "https://iec.study/fluent/"
+            }
+        
+        else:
+            # Платеж отменен или ошибка
+            payment_manager.log_payment("WARNING", f"Возврат с неуспешным платежом {payment_identifier}", {
+                "status": payment_status
+            })
+            return {
+                "status": "failed",
+                "message": "Payment was not completed",
+                "redirect": "https://iec.study/fluent/"
+            }
+        
+    except Exception as e:
+        payment_manager.log_payment("ERROR", f"Ошибка обработки /payment/success: {str(e)}", {
+            "payment_id": payment_identifier if 'payment_identifier' in locals() else None,
+            "exception": str(e)
+        })
+        return {
+            "status": "error",
+            "message": "Internal server error",
+            "redirect": "https://iec.study/fluent/"
+        }
+
 
 # CRM роуты (будут перенесены в отдельный файл)
 
