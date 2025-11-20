@@ -183,3 +183,4 @@ out/
 # Production build
 build/
 dist/
+payment_logs.txt
