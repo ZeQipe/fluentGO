@@ -662,10 +662,10 @@ async def login(response: Response, login: str, password: str):
             key="auth_token_jwt",
             value=token,
             max_age=24 * 60 * 60,  # 24 часа
-            httponly=False,  # Изменено на False для доступа из JavaScript
-            secure=True,  # Обязательно для SameSite=None
-            samesite="none",  # Изменено на none для межсайтовых запросов
-            domain=None,  # Позволяет работать с localhost
+            httponly=True,  # Защита от XSS атак
+            secure=True,  # Только через HTTPS
+            samesite="lax",  # Защита от CSRF
+            domain=".iec.study",  # Работает на всех поддоменах
             path="/"
         )
         
@@ -706,13 +706,13 @@ async def logout(request: Request, response: Response):
         if not token:
             raise HTTPException(status_code=404, detail="Токен не найден")
         
-        # Удаляем куку с токеном
+        # Удаляем куку с токеном (параметры должны совпадать с установкой)
         response.delete_cookie(
             key="auth_token_jwt",
-            httponly=False,
+            httponly=True,
             secure=True,
-            samesite="none",
-            domain=None,
+            samesite="lax",
+            domain=".iec.study",
             path="/"
         )
         
