@@ -201,26 +201,14 @@ async def get_demo_user():
         }
 
 @router.get("/check-auth")
-async def check_auth(request: Request, response: Response):
+async def check_auth(request: Request):
     """Проверка JWT токена из куков"""
     try:
-        # Получаем основной токен (httponly=True) - он главный
+        # Получаем токен из куков
         token = request.cookies.get("auth_token_jwt")
-        client_token = request.cookies.get("auth_token_jwt_client")
         
         if not token:
-            # Нет основного токена - удаляем клиентскую куку если она есть
-            if client_token:
-                response.delete_cookie(
-                    key="auth_token_jwt_client",
-                    httponly=False,
-                    secure=True,
-                    samesite="lax",
-                    domain=".iec.study",
-                    path="/"
-                )
-            
-            # Работаем с неавторизованным пользователем по IP
+            # Нет токена - работаем с неавторизованным пользователем по IP
             client_ip = request.client.host
             user_id = f"user_{client_ip.replace('.', '_')}"
             
@@ -266,41 +254,10 @@ async def check_auth(request: Request, response: Response):
                 }
             }
         
-        # Основной токен есть - синхронизируем клиентскую куку
-        if client_token != token:
-            # Клиентская кука отличается или отсутствует - перезаписываем
-            response.set_cookie(
-                key="auth_token_jwt_client",
-                value=token,
-                max_age=24 * 60 * 60,
-                httponly=False,
-                secure=True,
-                samesite="lax",
-                domain=".iec.study",
-                path="/"
-            )
-        
         # Проверяем токен и получаем данные пользователя
         user = await JWTService.verify_user_from_token(token)
         
         if not user:
-            # Токен невалидный - удаляем обе куки
-            response.delete_cookie(
-                key="auth_token_jwt",
-                httponly=True,
-                secure=True,
-                samesite="lax",
-                domain=".iec.study",
-                path="/"
-            )
-            response.delete_cookie(
-                key="auth_token_jwt_client",
-                httponly=False,
-                secure=True,
-                samesite="lax",
-                domain=".iec.study",
-                path="/"
-            )
             return {
                 "status": "unauthorized", 
                 "message": "Недействительный токен",
@@ -712,18 +669,6 @@ async def login(response: Response, login: str, password: str):
             path="/"
         )
         
-        # Дублирующая кука для доступа из JavaScript (фронтенд)
-        response.set_cookie(
-            key="auth_token_jwt_client",
-            value=token,
-            max_age=24 * 60 * 60,  # 24 часа
-            httponly=False,  # Доступна для JS
-            secure=True,  # Только через HTTPS
-            samesite="lax",  # Защита от CSRF
-            domain=".iec.study",  # Работает на всех поддоменах
-            path="/"
-        )
-        
         # Конвертируем секунды в минуты для фронтенда
         user_response = user.copy()
         user_response["remaining_time"] = await db_handler.get_remaining_minutes(user["id"])
@@ -761,20 +706,10 @@ async def logout(request: Request, response: Response):
         if not token:
             raise HTTPException(status_code=404, detail="Токен не найден")
         
-        # Удаляем основную куку с токеном (параметры должны совпадать с установкой)
+        # Удаляем куку с токеном (параметры должны совпадать с установкой)
         response.delete_cookie(
             key="auth_token_jwt",
             httponly=True,
-            secure=True,
-            samesite="lax",
-            domain=".iec.study",
-            path="/"
-        )
-        
-        # Удаляем дублирующую куку для JS
-        response.delete_cookie(
-            key="auth_token_jwt_client",
-            httponly=False,
             secure=True,
             samesite="lax",
             domain=".iec.study",
