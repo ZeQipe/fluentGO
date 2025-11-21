@@ -975,16 +975,17 @@ async def webhook_payment(request: Request):
                 })
             else:
                 # Сгораемые минуты (для подписок Start)
-                new_remaining = user.get("remaining_seconds", 0) + (minutes * 60)
+                # ВАЖНО: Заменяем старые минуты, а не добавляем (обновление тарифа)
+                new_remaining = minutes * 60
                 await db_handler.update_user(
                     user_id=user_id,
                     remaining_seconds=new_remaining,
                     tariff=tariff_id,
                     payment_status="active"
                 )
-                payment_manager.log_payment("INFO", f"Начислены сгораемые минуты через webhook", {
+                payment_manager.log_payment("INFO", f"Установлены сгораемые минуты через webhook (старые обнулены)", {
                     "user_id": user_id,
-                    "minutes": minutes,
+                    "new_minutes": minutes,
                     "tariff": tariff_id,
                     "payment_id": payment_data.external_order_id
                 })
@@ -1458,15 +1459,16 @@ async def check_subscription_payment_status(request: Request, paymentId: str):
                         })
                     else:
                         # Сгораемые минуты (для подписок Start)
-                        new_remaining = user.get("remaining_seconds", 0) + (minutes_to_add * 60)
+                        # ВАЖНО: Заменяем старые минуты, а не добавляем (обновление тарифа)
+                        new_remaining = minutes_to_add * 60
                         await db_handler.update_user(
                             user_id=user_id,
                             remaining_seconds=new_remaining,
                             tariff=tariff_id,
                             payment_status="active"
                         )
-                        payment_manager.log_payment("INFO", f"Начислены сгораемые минуты пользователю {user_id}", {
-                            "minutes": minutes_to_add,
+                        payment_manager.log_payment("INFO", f"Установлены сгораемые минуты пользователю {user_id} (старые обнулены)", {
+                            "new_minutes": minutes_to_add,
                             "tariff": tariff_id
                         })
                 else:
