@@ -4,7 +4,7 @@ from database import db_handler, minutes_to_seconds, topic_handler
 from services.jwt_service import JWTService
 from services.payment_service import payment_service
 from services import payment_manager
-from services.language_cache import language_cache
+from services.language_cache import language_cache, exchange_rate_cache
 import jwt
 import os
 from dotenv import load_dotenv
@@ -322,16 +322,8 @@ async def get_tariffs(request: Request):
         exchange_rate = None
         
         if locale == "ru":
-            try:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    response = await client.get("https://iec.study/wp-json/airalo/v1/exchange-rate-rub", timeout=5.0)
-                    if response.status_code == 200:
-                        rate_data = response.json()
-                        if rate_data.get("success") and rate_data.get("data"):
-                            exchange_rate = rate_data["data"].get("final_rate")
-            except:
-                pass  # Если не удалось получить курс, оставляем цены в долларах
+            # Получаем курс из кэша (автоматически обновится если TTL истек)
+            exchange_rate = await exchange_rate_cache.get_exchange_rate()
         
         # Определяем популярный тариф из файла тарифов (если задан)
         popular_tariff = None
