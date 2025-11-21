@@ -10,6 +10,7 @@ import io
 import wave
 
 from .prod_config import OPEN_AI_API_KEY
+from services.token_logger import token_logger
 
 logging.basicConfig(
     level=logging.INFO,
@@ -121,6 +122,26 @@ class AsyncOpenAIAgent:
             logger.info(f"[MY_LOG] AOAIAgent_h_m: {message}")
         elif message.type == 'response.done':
             self._generating = False
+            
+            # Логируем использованные токены
+            try:
+                if hasattr(message, 'response') and message.response:
+                    usage = getattr(message.response, 'usage', None)
+                    if usage:
+                        # Получаем данные пользователя
+                        user_id = await self.handler.get_property(self.client_ip, 'user_id') or self.client_ip
+                        user_name = await self.handler.get_property(self.client_ip, 'user_name') or 'Unknown'
+                        
+                        # Извлекаем токены
+                        input_tokens = getattr(usage, 'input_tokens', 0)
+                        output_tokens = getattr(usage, 'output_tokens', 0)
+                        total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
+                        
+                        # Логируем
+                        token_logger.log_tokens(user_id, user_name, input_tokens, output_tokens, total_tokens)
+            except Exception as e:
+                logger.error(f"Ошибка логирования токенов: {e}")
+            
             # Фиксируем конец ответа и считаем длительность
             response_start = await self.handler.get_property(self.client_ip, 'response_start_time')
             if response_start:

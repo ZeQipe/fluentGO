@@ -14,3 +14,4 @@ torch
 torchaudio
 apscheduler
 pytz
+reportlab

@@ -5,6 +5,7 @@ from services.jwt_service import JWTService
 from services.payment_service import payment_service
 from services import payment_manager
 from services.language_cache import language_cache, exchange_rate_cache
+from services.report_generator import report_generator
 import jwt
 import os
 from dotenv import load_dotenv
@@ -15,6 +16,7 @@ import uuid
 import math
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
 from routers.websocket import get_user_id_from_cookies
 
 # Импорты для Button Realtime
@@ -1622,6 +1624,66 @@ async def payment_success_handler(
             "message": "Internal server error",
             "redirect": "https://iec.study/fluent/"
         }
+
+
+# ========================================
+# Секретный роут для генерации отчетов
+# ========================================
+@router.get("/secret/report")
+async def generate_token_report(password: str):
+    """
+    Генерация PDF отчета по использованию токенов за текущий месяц
+    
+    Параметры:
+        - password: Пароль для доступа к отчету (из .env)
+    
+    Возвращает:
+        - PDF файл с отчетом
+    """
+    try:
+        # Проверяем пароль
+        expected_password = os.getenv("REPORT_PASSWORD", "")
+        
+        if not expected_password:
+            raise HTTPException(
+                status_code=500,
+                detail="Report password not configured"
+            )
+        
+        if password != expected_password:
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid password"
+            )
+        
+        # Генерируем отчет за текущий месяц
+        now = datetime.now()
+        year = now.year
+        month = now.month
+        
+        # Генерируем PDF
+        pdf_buffer = report_generator.generate_pdf_report(year, month)
+        
+        # Возвращаем PDF файл
+        from fastapi.responses import StreamingResponse
+        
+        filename = f"token_report_{year}_{month:02d}.pdf"
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка генерации отчета: {str(e)}"
+        )
 
 
 # CRM роуты (будут перенесены в отдельный файл)
