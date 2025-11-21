@@ -185,46 +185,40 @@ def create_app() -> FastAPI:
                 locale_to_set = segments[0]
                 # Убираем языковой префикс из пути
                 path_without_locale = "/".join(segments[1:])
-        
-        # сначала пытаемся отдать точный файл из out
-        base = os.path.join(OUT_DIR, path_without_locale.lstrip("/"))
-        resp = try_serve(base)
-        if resp:
-            # Если был языковой префикс - устанавливаем куку
-            if locale_to_set:
+                
+                # Делаем редирект на URL без языкового префикса
+                redirect_url = f"{server_prefix}/{path_without_locale}" if path_without_locale else server_prefix + "/"
+                
+                # Сохраняем query параметры если есть
+                if request.url.query:
+                    redirect_url += f"?{request.url.query}"
+                
+                # Создаем редирект с установкой куки
+                from fastapi.responses import RedirectResponse
+                resp = RedirectResponse(url=redirect_url, status_code=302)
                 resp.set_cookie(
                     key="iec_preferred_locale",
                     value=locale_to_set,
                     httponly=False,
                     samesite="lax"
                 )
+                return resp
+        
+        # Обычная отдача файлов (без языкового префикса)
+        base = os.path.join(OUT_DIR, path_without_locale.lstrip("/"))
+        resp = try_serve(base)
+        if resp:
             return resp
 
         # 404.html если есть
         not_found = os.path.join(OUT_DIR, "404.html")
         if os.path.isfile(not_found):
-            resp = FileResponse(not_found, status_code=404)
-            if locale_to_set:
-                resp.set_cookie(
-                    key="iec_preferred_locale",
-                    value=locale_to_set,
-                    httponly=False,
-                    samesite="lax"
-                )
-            return resp
+            return FileResponse(not_found, status_code=404)
 
         # или index.html как общий fallback
         index = os.path.join(OUT_DIR, "index.html")
         if os.path.isfile(index):
-            resp = FileResponse(index, status_code=200)
-            if locale_to_set:
-                resp.set_cookie(
-                    key="iec_preferred_locale",
-                    value=locale_to_set,
-                    httponly=False,
-                    samesite="lax"
-                )
-            return resp
+            return FileResponse(index, status_code=200)
 
         return Response("Build is missing. Run next build.", status_code=500)
     

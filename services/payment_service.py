@@ -45,7 +45,7 @@ class PaymentService:
             user_id: ID пользователя
             amount: Сумма платежа
             currency: Валюта (USD или RUB)
-            payment_method: Способ оплаты (yandex_pay или paypal)
+            payment_method: Способ оплаты (yookassa или paypal)
             tariff_name: Название тарифа
             external_order_id: Внешний ID заказа (опционально)
         
