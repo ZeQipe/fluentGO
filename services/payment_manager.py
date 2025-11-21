@@ -173,6 +173,10 @@ async def create_one_time_payment(
         # Конвертируем цену
         amount, currency = await convert_price(price_usd, locale)
         
+        # Конвертируем payment_system в payment_method для API
+        # Для разовых платежей (buy) yookassa → yandex_pay
+        payment_method = "yandex_pay" if payment_system == "yookassa" else "paypal"
+        
         # Извлекаем минуты
         minutes = parse_minutes_from_tariff(tariff_data)
         
@@ -187,7 +191,7 @@ async def create_one_time_payment(
             "external_order_id": external_order_id,
             "amount": amount / 100,  # API принимает в рублях/долларах, не в копейках
             "currency": currency,
-            "payment_method": payment_system,  # "yookassa" или "paypal"
+            "payment_method": payment_method,  # "yandex_pay" или "paypal"
             "webhook_url": os.getenv("WEBHOOK_URL", "https://iec.study/fluent/api/webhook/payment"),
             "auth_token": os.getenv("WEBHOOK_AUTH_TOKEN", "Bearer_Token_12345"),
             "return_url": os.getenv("PAYMENT_RETURN_URL", "https://iec.study/fluent"),

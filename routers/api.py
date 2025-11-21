@@ -61,7 +61,7 @@ async def get_session_id(request: Request):
 class CreatePaymentRequest(BaseModel):
     amount: float
     currency: str  # USD или RUB
-    payment_method: str  # yookassa или paypal
+    payment_method: str  # yandex_pay или paypal
     tariff_name: str
     minutes_to_add: int  # Сколько минут добавить пользователю
     external_order_id: Optional[str] = None
@@ -810,8 +810,8 @@ async def create_payment(request: Request, payment_data: CreatePaymentRequest):
     if payment_data.currency not in ["USD", "RUB"]:
         raise HTTPException(status_code=400, detail="Поддерживаются только USD и RUB")
     
-    if payment_data.payment_method not in ["yookassa", "paypal"]:
-        raise HTTPException(status_code=400, detail="Поддерживаются только yookassa и paypal")
+    if payment_data.payment_method not in ["yandex_pay", "paypal"]:
+        raise HTTPException(status_code=400, detail="Поддерживаются только yandex_pay и paypal")
     
     try:
         # Создаем платеж через внешний API
