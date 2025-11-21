@@ -154,6 +154,13 @@ def create_app() -> FastAPI:
         
         asyncio.create_task(cleanup_task())
         print("Фоновая задача очистки соединений запущена!")
+        
+        # Запуск планировщика кронтабов
+        print("Инициализация кронтабов...")
+        from services.cron_scheduler import cron_scheduler
+        cron_scheduler.setup_jobs()
+        cron_scheduler.start()
+        print("Планировщик кронтабов запущен!")
     
     # Подключение роутеров с префиксом
     app.include_router(api.router, prefix=f"{server_prefix}/api", tags=["API"])

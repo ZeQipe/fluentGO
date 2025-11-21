@@ -59,9 +59,30 @@ class DatabaseHandler:
                     tariff TEXT,
                     payment_date INTEGER,
                     payment_status TEXT,
-                    status TEXT
+                    status TEXT,
+                    subscription_id TEXT,
+                    payment_system TEXT,
+                    subscription_status TEXT
                 )
             """)
+            
+            # Миграция: добавляем новые поля если их нет
+            try:
+                # Проверяем существование колонок
+                cursor = await db.execute("PRAGMA table_info(users)")
+                columns = await cursor.fetchall()
+                column_names = [col[1] for col in columns]
+                
+                if 'subscription_id' not in column_names:
+                    await db.execute("ALTER TABLE users ADD COLUMN subscription_id TEXT")
+                if 'payment_system' not in column_names:
+                    await db.execute("ALTER TABLE users ADD COLUMN payment_system TEXT")
+                if 'subscription_status' not in column_names:
+                    await db.execute("ALTER TABLE users ADD COLUMN subscription_status TEXT")
+                
+                await db.commit()
+            except Exception as e:
+                print(f"Миграция БД: {e}")
             
             await db.execute("""
                 CREATE TABLE topic (
