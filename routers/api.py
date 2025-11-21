@@ -4,6 +4,7 @@ from database import db_handler, minutes_to_seconds, topic_handler
 from services.jwt_service import JWTService
 from services.payment_service import payment_service
 from services import payment_manager
+from services.language_cache import language_cache
 import jwt
 import os
 from dotenv import load_dotenv
@@ -467,35 +468,18 @@ async def get_language(request: Request):
 
 @router.get("/language/settings")
 async def get_language_settings(request: Request):
-    """Получение списка поддерживаемых языков"""
-    try:
-        # Получаем языки из переменной окружения
-        languages_str = os.getenv("SUPPORTED_LANGUAGES", "ru,en,fr,it,es,de")
-        
-        # Разбиваем строку на массив
-        languages = [lang.strip() for lang in languages_str.split(",") if lang.strip()]
-        
-        # Если массив пустой, используем значения по умолчанию
-        if not languages:
-            languages = ["ru", "en", "fr", "it", "es", "de"]
-        
-        # Получаем текущий язык из куки
-        current_locale = request.cookies.get("iec_preferred_locale", "en")
-        
-        return {
-            "status": "success",
-            "languages": languages,
-            "currentLocale": current_locale
-        }
-        
-    except Exception as e:
-        # При ошибке возвращаем языки по умолчанию
-        current_locale = request.cookies.get("iec_preferred_locale", "en")
-        return {
-            "status": "success", 
-            "languages": ["ru", "en", "fr", "it", "es", "de"],
-            "currentLocale": current_locale
-        }
+    """Получение списка поддерживаемых языков (с кэшированием)"""
+    # Получаем языки из кэша (автоматически обновится если TTL истек)
+    languages = await language_cache.get_languages()
+    
+    # Получаем текущий язык из куки
+    current_locale = request.cookies.get("iec_preferred_locale", "en")
+    
+    return {
+        "status": "success",
+        "languages": languages,
+        "currentLocale": current_locale
+    }
 
 class LanguageRequest(BaseModel):
     language: str
@@ -504,8 +488,9 @@ class LanguageRequest(BaseModel):
 async def set_language(response: Response, request: LanguageRequest):
     """Установка языка в куки"""
     language = request.language
-    # Список поддерживаемых языков
-    supported_languages = ["en", "ru", "es", "fr", "de", "it", "pt", "zh", "ja", "ko"]
+    
+    # Получаем список поддерживаемых языков из кэша
+    supported_languages = await language_cache.get_languages()
     
     # Проверяем, что язык поддерживается
     if language not in supported_languages:
