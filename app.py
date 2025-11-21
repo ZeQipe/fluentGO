@@ -13,19 +13,9 @@ from routers import api, websocket, crm
 load_dotenv()
 
 # ========================================
-# Поддерживаемые языки для роутинга (из .env)
+# Языки берутся из language_cache (CRM API)
 # ========================================
-def get_supported_languages():
-    """Получить список поддерживаемых языков из .env"""
-    langs_str = os.getenv("SUPPORTED_LANGUAGES", '["ru","en","fr","it","es","de"]')
-    try:
-        # Пробуем распарсить как JSON
-        return json.loads(langs_str)
-    except json.JSONDecodeError:
-        # Если не JSON, пробуем через запятую
-        return [lang.strip() for lang in langs_str.split(",")]
-
-SUPPORTED_LANGUAGES = get_supported_languages()
+from services.language_cache import language_cache
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -96,7 +86,9 @@ def create_app() -> FastAPI:
         
         if path:
             segments = path.lstrip("/").split("/")
-            if segments and segments[0] in SUPPORTED_LANGUAGES:
+            # Получаем список языков из кэша (CRM API)
+            supported_languages = await language_cache.get_languages()
+            if segments and segments[0] in supported_languages:
                 # Убираем языковой префикс для проверки файловой системы
                 path_for_file_check = "/" + "/".join(segments[1:]) if len(segments) > 1 else "/"
         
@@ -180,7 +172,9 @@ def create_app() -> FastAPI:
         if full_path:
             # Разбиваем путь на сегменты
             segments = full_path.lstrip("/").split("/")
-            if segments and segments[0] in SUPPORTED_LANGUAGES:
+            # Получаем список языков из кэша (CRM API)
+            supported_languages = await language_cache.get_languages()
+            if segments and segments[0] in supported_languages:
                 # Нашли языковой префикс
                 locale_to_set = segments[0]
                 # Убираем языковой префикс из пути
