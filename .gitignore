@@ -184,3 +184,4 @@ out/
 build/
 dist/
 payment_logs.txt
+cron_logs.txt
