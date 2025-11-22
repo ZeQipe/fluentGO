@@ -4,6 +4,7 @@
     "name": "Free Guest",
     "price": "$0",
     "period": "/mo",
+    "type": "free",
     "statuses": [],
     "features": [
       {
@@ -33,6 +34,7 @@
     "name": "Pay-as-you-go",
     "price": "$15",
     "period": "/100 min",
+    "type": "one-time",
     "statuses": [],
     "features": [
       {
@@ -68,6 +70,7 @@
     "name": "Standard Subscription",
     "price": "$9",
     "period": "/mo",
+    "type": "subscription",
     "statuses": [],
     "features": [
       {
@@ -101,6 +104,7 @@
     "name": "PRO Subscription",
     "price": "$29",
     "period": "/mo",
+    "type": "subscription",
     "statuses": [],
     "features": [
       {
@@ -134,6 +138,7 @@
     "name": "PRO + Subscription",
     "price": "$14.5",
     "period": "/mo",
+    "type": "subscription",
     "statuses": ["vip"],
     "features": [
       {
@@ -167,6 +172,7 @@
     "name": "CMO Subscription",
     "price": "$10",
     "period": "/mo",
+    "type": "subscription",
     "statuses": ["CMO"],
     "features": [
       {

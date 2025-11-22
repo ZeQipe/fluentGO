@@ -413,6 +413,28 @@ async def get_tariffs(request: Request):
             if popular_tariff and tariff["tariff"] == popular_tariff:
                 tariff_copy["popularLabel"] = "Popular"
             
+            # Добавляем hasModal и paymentButtons на основе локали и типа тарифа
+            from config import MODAL_LANGUAGES, ONE_TIME_PAYMENT_SYSTEMS, SUBSCRIPTION_PAYMENT_SYSTEMS, DEFAULT_PAYMENT_SYSTEM
+            
+            # Определяем hasModal по языку
+            has_modal = locale in MODAL_LANGUAGES
+            tariff_copy["hasModal"] = has_modal
+            
+            # Определяем paymentButtons
+            if not has_modal:
+                # Для всех языков кроме MODAL_LANGUAGES - дефолтная система
+                tariff_copy["paymentButtons"] = DEFAULT_PAYMENT_SYSTEM
+            else:
+                # Для языков с модалкой - определяем по типу тарифа
+                tariff_type = tariff.get("type")
+                if tariff_type == "one-time":
+                    tariff_copy["paymentButtons"] = ONE_TIME_PAYMENT_SYSTEMS
+                elif tariff_type == "subscription":
+                    tariff_copy["paymentButtons"] = SUBSCRIPTION_PAYMENT_SYSTEMS
+                else:
+                    # Для тарифов без типа или с неизвестным типом
+                    tariff_copy["paymentButtons"] = []
+            
             result_tariffs.append(tariff_copy)
         
         # Формируем ответ
