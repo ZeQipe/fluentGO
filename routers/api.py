@@ -1096,31 +1096,19 @@ async def get_user_topics(request: Request):
         raise HTTPException(status_code=500, detail=f"Ошибка получения тем: {str(e)}")
 
 async def get_base_topics_from_file():
-    """Получение базовых тем из файла без ID"""
+    """Получение базовых тем из ConfigData.txt (секция -> Topic)"""
     try:
-        # Читаем файл с темами
-        with open("document/default_topics.txt", "r", encoding="utf-8") as f:
-            content = f.read()
+        parser = get_config_parser()
+        topics = parser.get_topics()
         
-        # Парсим по блокам (разделитель - две пустые строки)
-        blocks = content.strip().split("\n\n")
-        
+        # Добавляем поле base: True к каждой теме
         base_topics = []
-        for block in blocks[:6]:  # Берем только первые 6 тем
-            lines = block.strip().split("\n", 1)  # Разделяем на заголовок и описание
-            if len(lines) == 2:
-                base_topics.append({
-                    "title": lines[0].strip(),
-                    "description": lines[1].strip(),
-                    "base": True
-                })
-            elif len(lines) == 1:
-                # Если только заголовок без описания
-                base_topics.append({
-                    "title": lines[0].strip(),
-                    "description": "",
-                    "base": True
-                })
+        for topic in topics[:6]:  # Берем только первые 6 тем
+            base_topics.append({
+                "title": topic["title"],
+                "description": topic["description"],
+                "base": True
+            })
         
         return base_topics
         
