@@ -6,23 +6,14 @@
     "period": "/mo",
     "type": "free",
     "statuses": [],
-    "features": [
-      {
-        "text": "1 demo dialogue (2 minutes)",
-        "included": true
-      },
-      {
-        "text": "Basic topics",
-        "included": true
-      },
-      {
-        "text": "Voice messages",
-        "included": true
-      },
-      {
-        "text": "No registration required",
-        "included": true
-      }
+    "features": [{"text": "1 demo dialogue (2 minutes)",
+                  "included": true},
+                 {"text": "Basic topics",
+                  "included": true},
+                 {"text": "Voice messages",
+                  "included": true},
+                 {"text": "No registration required",
+                  "included": true}
     ],
     "tariff": "free",
     "buttonText": "Current",

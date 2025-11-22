@@ -6,6 +6,7 @@ from services.payment_service import payment_service
 from services import payment_manager
 from services.language_cache import language_cache, exchange_rate_cache
 from services.report_generator import report_generator
+from services.config_parser import get_config_parser
 import jwt
 import os
 from dotenv import load_dotenv
@@ -547,27 +548,16 @@ async def delete_language(response: Response):
 
 @router.get("/video")
 async def get_video():
-    """Получение ссылки на видео из document/media.txt"""
+    """Получение ссылки на видео из document/ConfigData.txt (секция -> Media)"""
     try:
-        media_file_path = os.path.join("document", "media.txt")
-        
-        # Проверяем существование файла
-        if not os.path.exists(media_file_path):
-            raise HTTPException(
-                status_code=500,
-                detail="Файл media.txt не найден"
-            )
-        
-        # Читаем первую строку из файла
-        async with aiofiles.open(media_file_path, 'r', encoding='utf-8') as f:
-            first_line = await f.readline()
-            video_url = first_line.strip()
+        parser = get_config_parser()
+        video_url = parser.get_media()
         
         # Проверяем что ссылка не пустая
         if not video_url:
             raise HTTPException(
                 status_code=500,
-                detail="Ссылка на видео отсутствует"
+                detail="Ссылка на видео отсутствует в ConfigData.txt"
             )
         
         return {
@@ -575,47 +565,33 @@ async def get_video():
             "videoUrl": video_url
         }
         
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Файл ConfigData.txt не найден: {str(e)}"
+        )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Ошибка при чтении файла media.txt: {str(e)}"
+            detail=f"Ошибка при чтении ConfigData.txt: {str(e)}"
         )
 
 @router.get("/help")
 async def get_help():
-    """Получение справочной информации из document/help_info.txt"""
+    """Получение справочной информации из document/ConfigData.txt (секция -> Help)"""
     try:
-        # Читаем файл
-        with open("document/help_info.txt", "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        # Парсим по блокам (разделитель - две пустые строки)
-        blocks = content.strip().split("\n\n")
-        
-        help_items = []
-        for block in blocks:
-            lines = block.strip().split("\n", 1)  # Разделяем на заголовок и описание
-            if len(lines) == 2:
-                help_items.append({
-                    "title": lines[0].strip(),
-                    "description": lines[1].strip()
-                })
-            elif len(lines) == 1:
-                # Если только заголовок без описания
-                help_items.append({
-                    "title": lines[0].strip(),
-                    "description": ""
-                })
+        parser = get_config_parser()
+        help_items = parser.get_help()
         
         return {
             "status": "success",
             "items": help_items
         }
         
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Файл справки не найден")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=f"Файл ConfigData.txt не найден: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка чтения справки: {str(e)}")
 
