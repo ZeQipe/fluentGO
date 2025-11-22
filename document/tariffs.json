@@ -20,6 +20,7 @@
     "buttonType": "standard",
     "disabled": false
   },
+  
   {
     "id": "pay-as-you-go",
     "name": "Pay-as-you-go",
@@ -134,7 +135,7 @@
     "features": [
       {
         "text": "Unlimited conversations",
-        "included": true
+        "included": false
       },
       {
         "text": "Priority support",
