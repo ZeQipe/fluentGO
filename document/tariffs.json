@@ -6,14 +6,11 @@
     "period": "/mo",
     "type": "free",
     "statuses": [],
-    "features": [{"text": "1 demo dialogue (2 minutes)",
-                  "included": true},
-                 {"text": "Basic topics",
-                  "included": true},
-                 {"text": "Voice messages",
-                  "included": true},
-                 {"text": "No registration required",
-                  "included": true}
+    "features": [
+      { "text": "1 demo dialogue (2 minutes)", "included": true },
+      { "text": "Basic topics", "included": true },
+      { "text": "Voice messages", "included": true },
+      { "text": "No registration required", "included": true }
     ],
     "tariff": "free",
     "buttonText": "Current",
@@ -29,26 +26,11 @@
     "type": "one-time",
     "statuses": [],
     "features": [
-      {
-        "text": "100 minutes of conversation",
-        "included": true
-      },
-      {
-        "text": "All topics and scenarios",
-        "included": true
-      },
-      {
-        "text": "Real-time + voice messages",
-        "included": true
-      },
-      {
-        "text": "Detailed analytics",
-        "included": true
-      },
-      {
-        "text": "Minutes never expire",
-        "included": true
-      }
+      { "text": "100 minutes of conversation", "included": true },
+      { "text": "All topics and scenarios", "included": true },
+      { "text": "Real-time + voice messages", "included": true },
+      { "text": "Detailed analytics", "included": true },
+      { "text": "Minutes never expire", "included": true }
     ],
     "tariff": "pay-as-you-go",
     "buttonText": "Buy",
@@ -57,6 +39,7 @@
     "popularLabel": "Popular",
     "disabled": false
   },
+
   {
     "id": "standart",
     "name": "Standard Subscription",
@@ -65,32 +48,18 @@
     "type": "subscription",
     "statuses": [],
     "features": [
-      {
-        "text": "50 min/month",
-        "included": true
-      },
-      {
-        "text": "Priority support",
-        "included": true
-      },
-      {
-        "text": "Custom scenarios",
-        "included": true
-      },
-      {
-        "text": "Export dialogues",
-        "included": true
-      },
-      {
-        "text": "Advanced analytics",
-        "included": true
-      }
+      { "text": "Priority support", "included": true },
+      { "text": "Custom scenarios", "included": true },
+      { "text": "Export dialogues", "included": true },
+      { "text": "Advanced analytics", "included": true },
+      { "text": "50 min/month", "included": true }
     ],
     "tariff": "standart",
     "buttonText": "Start",
     "buttonType": "secondary",
     "disabled": false
   },
+
   {
     "id": "pro",
     "name": "PRO Subscription",
@@ -99,32 +68,18 @@
     "type": "subscription",
     "statuses": [],
     "features": [
-      {
-        "text": "200 min/month",
-        "included": true
-      },
-      {
-        "text": "Priority support",
-        "included": true
-      },
-      {
-        "text": "Custom scenarios",
-        "included": true
-      },
-      {
-        "text": "Export dialogues",
-        "included": true
-      },
-      {
-        "text": "Advanced analytics",
-        "included": true
-      }
+      { "text": "Priority support", "included": true },
+      { "text": "Custom scenarios", "included": true },
+      { "text": "Export dialogues", "included": true },
+      { "text": "Advanced analytics", "included": true },
+      { "text": "200 min/month", "included": true }
     ],
     "tariff": "pro",
     "buttonText": "Start",
     "buttonType": "secondary",
     "disabled": false
   },
+
   {
     "id": "pro-plus",
     "name": "PRO + Subscription",
@@ -133,32 +88,18 @@
     "type": "subscription",
     "statuses": ["vip"],
     "features": [
-      {
-        "text": "Unlimited conversations",
-        "included": false
-      },
-      {
-        "text": "Priority support",
-        "included": true
-      },
-      {
-        "text": "Custom scenarios",
-        "included": true
-      },
-      {
-        "text": "Export dialogues",
-        "included": true
-      },
-      {
-        "text": "Advanced analytics",
-        "included": true
-      }
+      { "text": "Priority support", "included": true },
+      { "text": "Custom scenarios", "included": true },
+      { "text": "Export dialogues", "included": true },
+      { "text": "Advanced analytics", "included": true },
+      { "text": "Unlimited conversations", "included": false }
     ],
     "tariff": "pro-plus",
     "buttonText": "Start",
     "buttonType": "secondary",
     "disabled": false
   },
+
   {
     "id": "Only cmo-subscription",
     "name": "CMO Subscription",
@@ -167,18 +108,9 @@
     "type": "subscription",
     "statuses": ["CMO"],
     "features": [
-      {
-        "text": "All topics and scenarios",
-        "included": true
-      },
-      {
-        "text": "Real-time + voice messages",
-        "included": true
-      },
-      {
-        "text": "Priority support",
-        "included": true
-      }
+      { "text": "All topics and scenarios", "included": true },
+      { "text": "Real-time + voice messages", "included": true },
+      { "text": "Priority support", "included": true }
     ],
     "tariff": "cmo",
     "buttonText": "Start",

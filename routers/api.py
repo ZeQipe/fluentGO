@@ -307,11 +307,13 @@ async def get_tariffs(request: Request):
         token = request.cookies.get("auth_token_jwt")
         current_user_tariff = "free"  # По умолчанию для неавторизованных
         current_user_status = "user"  # По умолчанию статус обычного пользователя
+        is_authenticated = False  # Флаг авторизации
         
         if token:
             try:
                 user_data = await JWTService.verify_user_from_token(token)
                 if user_data:
+                    is_authenticated = True
                     current_user_tariff = user_data.get("tariff", "free")
                     # Получаем статус пользователя из БД
                     user_db_data = await db_handler.get_user(user_data.get("id"))
@@ -368,12 +370,25 @@ async def get_tariffs(request: Request):
                 except:
                     pass  # Если не удалось сконвертировать, оставляем исходную цену
             
-            # Логика для Free тарифа
-            if current_user_tariff == "free":
+            # Определяем кнопку для тарифа
+            # Если пользователь не авторизован - для free тарифа ставим "Start"
+            if not is_authenticated:
                 if tariff["tariff"] == "free":
-                    tariff_copy["buttonText"] = "Current"
-                    tariff_copy["buttonType"] = "standard"
+                    tariff_copy["buttonText"] = "Start"
+                    tariff_copy["buttonType"] = "secondary"
                 elif tariff["tariff"] == "pay-as-you-go":
+                    tariff_copy["buttonText"] = "Buy"
+                    tariff_copy["buttonType"] = "secondary"
+                else:  # Подписки
+                    tariff_copy["buttonText"] = "Start"
+                    tariff_copy["buttonType"] = "secondary"
+            # Если пользователь авторизован - для его текущего тарифа ставим "Current"
+            elif tariff["tariff"] == current_user_tariff:
+                tariff_copy["buttonText"] = "Current"
+                tariff_copy["buttonType"] = "standard"
+            # Логика для остальных тарифов (авторизованный пользователь)
+            elif current_user_tariff == "free":
+                if tariff["tariff"] == "pay-as-you-go":
                     tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
                 else:  # Подписки
