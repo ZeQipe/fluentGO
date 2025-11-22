@@ -455,10 +455,11 @@ async def get_most_popular_tariff():
 @router.get("/language")
 async def get_language(request: Request):
     """Получение текущего языка из куков"""
-    # Получаем язык из куков, если нет - возвращаем "en" по умолчанию
-    language = request.cookies.get("iec_preferred_locale", "en")
+    # Получаем язык из куков, если нет - возвращаем null
+    # Фронтенд сам решит, использовать ли "en" по умолчанию
+    language = request.cookies.get("iec_preferred_locale")
     
-    return {"language": language}
+    return {"language": language if language else None}
 
 @router.get("/language/settings")
 async def get_language_settings(request: Request):
@@ -467,12 +468,13 @@ async def get_language_settings(request: Request):
     languages = await language_cache.get_languages()
     
     # Получаем текущий язык из куки
-    current_locale = request.cookies.get("iec_preferred_locale", "en")
+    # Если куки нет - возвращаем null, фронтенд сам установит "en" если нужно
+    current_locale = request.cookies.get("iec_preferred_locale")
     
     return {
         "status": "success",
         "languages": languages,
-        "currentLocale": current_locale
+        "currentLocale": current_locale if current_locale else None
     }
 
 class LanguageRequest(BaseModel):
