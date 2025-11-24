@@ -32,10 +32,11 @@ class CronLogger:
             with open(self.log_file, "a", encoding="utf-8") as f:
                 f.write(log_entry)
         except Exception as e:
-            print(f"Ошибка записи лога: {e}")
+            # Ошибку записи лога игнорируем для консоли, чтобы не засорять вывод
+            # Можно добавить альтернативное хранилище/алерт при необходимости
+            pass
         
-        # Дублируем в консоль
-        print(log_entry.strip())
+        # Убрано дублирование в консоль
     
     def log_task_start(self, task_name: str):
         """Логировать начало выполнения задачи"""
