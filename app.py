@@ -106,7 +106,26 @@ def create_app() -> FastAPI:
             # ✅ используем оригинальный path (с языковым префиксом)
             new_path = request.url.path + "/"
             new_url = request.url.replace(path=new_path)  # query сохраняется автоматически
-            return RedirectResponse(url=str(new_url), status_code=308)
+            # Если передали ?locale=xx — устанавливаем куку на редиректе
+            resp = RedirectResponse(url=str(new_url), status_code=308)
+            try:
+                query_locale = request.query_params.get("locale")
+                if query_locale:
+                    # Если список языков уже получен выше — используем его; иначе получим
+                    try:
+                        langs = supported_languages
+                    except NameError:
+                        langs = await language_cache.get_languages()
+                    if (not langs) or (query_locale in langs):
+                        resp.set_cookie(
+                            key="iec_preferred_locale",
+                            value=str(query_locale),
+                            httponly=False,
+                            samesite="lax"
+                        )
+            except Exception:
+                pass
+            return resp
 
         return await call_next(request)
     
@@ -198,22 +217,79 @@ def create_app() -> FastAPI:
                 )
                 return resp
         
+        # Обработка параметра ?locale=xx (без языкового префикса в path)
+        try:
+            query_locale = request.query_params.get("locale")
+            if query_locale:
+                # Гарантируем список языков
+                try:
+                    langs = supported_languages
+                except NameError:
+                    langs = await language_cache.get_languages()
+                if (not langs) or (query_locale in langs):
+                    locale_to_set = str(query_locale)
+        except Exception:
+            pass
+        
         # Обычная отдача файлов (без языкового префикса)
         base = os.path.join(OUT_DIR, path_without_locale.lstrip("/"))
         resp = try_serve(base)
         if resp:
+            if locale_to_set:
+                try:
+                    resp.set_cookie(
+                        key="iec_preferred_locale",
+                        value=locale_to_set,
+                        httponly=False,
+                        samesite="lax"
+                    )
+                except Exception:
+                    pass
             return resp
 
         # 404.html если есть
         not_found = os.path.join(OUT_DIR, "404.html")
         if os.path.isfile(not_found):
-            return FileResponse(not_found, status_code=404)
+            resp = FileResponse(not_found, status_code=404)
+            if locale_to_set:
+                try:
+                    resp.set_cookie(
+                        key="iec_preferred_locale",
+                        value=locale_to_set,
+                        httponly=False,
+                        samesite="lax"
+                    )
+                except Exception:
+                    pass
+            return resp
 
         # или index.html как общий fallback
         index = os.path.join(OUT_DIR, "index.html")
         if os.path.isfile(index):
-            return FileResponse(index, status_code=200)
+            resp = FileResponse(index, status_code=200)
+            if locale_to_set:
+                try:
+                    resp.set_cookie(
+                        key="iec_preferred_locale",
+                        value=locale_to_set,
+                        httponly=False,
+                        samesite="lax"
+                    )
+                except Exception:
+                    pass
+            return resp
 
-        return Response("Build is missing. Run next build.", status_code=500)
+        resp = Response("Build is missing. Run next build.", status_code=500)
+        if locale_to_set:
+            try:
+                resp.set_cookie(
+                    key="iec_preferred_locale",
+                    value=locale_to_set,
+                    httponly=False,
+                    samesite="lax"
+                )
+            except Exception:
+                pass
+        return resp
     
     return app
