@@ -11,6 +11,44 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+# Пытаемся зарегистрировать шрифты с поддержкой кириллицы, чтобы не было «квадратиков»
+FONT_NORMAL = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
+
+def _ensure_cyrillic_fonts_registered():
+    """Регистрирует TTF‑шрифты с поддержкой кириллицы, если они доступны в системе."""
+    global FONT_NORMAL, FONT_BOLD
+    candidates = [
+        # Linux (часто есть в контейнерах)
+        ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ("NotoSans", "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
+        ("FreeSans", "/usr/share/fonts/truetype/freefont/FreeSans.ttf", "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
+        ("LiberationSans", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+        # Windows (локальная разработка)
+        ("Arial", "C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf"),
+        ("SegoeUI", "C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\segoeuib.ttf"),
+    ]
+    for family, normal_path, bold_path in candidates:
+        try:
+            if os.path.exists(normal_path) and os.path.exists(bold_path):
+                pdfmetrics.registerFont(TTFont(f"{family}", normal_path))
+                pdfmetrics.registerFont(TTFont(f"{family}-Bold", bold_path))
+                FONT_NORMAL = family
+                FONT_BOLD = f"{family}-Bold"
+                return
+        except Exception:
+            # Пробуем следующий кандидат
+            continue
+    # Если ни один не подошёл — останутся Helvetica/Helvetica-Bold (могут не иметь кириллицу)
+    return
+
+def _fmt_num(n: int) -> str:
+    """Формат чисел с пробелом в качестве разделителя тысяч: 12 345."""
+    try:
+        return f"{int(n):,}".replace(",", " ")
+    except Exception:
+        return str(n)
+
 class TokenReportGenerator:
     """Генератор отчетов по использованию токенов"""
     
@@ -91,6 +129,9 @@ class TokenReportGenerator:
         
         Возвращает BytesIO с PDF файлом
         """
+        # Готовим шрифты (кириллица)
+        _ensure_cyrillic_fonts_registered()
+
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
         
@@ -100,6 +141,7 @@ class TokenReportGenerator:
             'CustomTitle',
             parent=styles['Heading1'],
             fontSize=18,
+            fontName=FONT_BOLD,
             textColor=colors.HexColor('#1a1a1a'),
             spaceAfter=30,
             alignment=1  # Центрирование
@@ -109,11 +151,17 @@ class TokenReportGenerator:
             'CustomHeading',
             parent=styles['Heading2'],
             fontSize=14,
+            fontName=FONT_BOLD,
             textColor=colors.HexColor('#333333'),
             spaceAfter=12
         )
         
-        normal_style = styles['Normal']
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontName=FONT_NORMAL,
+            fontSize=11
+        )
         
         # Получаем данные
         users_data = self.parse_tokens_file(year, month)
@@ -153,7 +201,7 @@ class TokenReportGenerator:
             
             summary = Paragraph(
                 f"<b>Общая статистика:</b> {len(users_data)} пользователей, "
-                f"{total_all:,} токенов",
+                f"{_fmt_num(total_all)} токенов",
                 heading_style
             )
             content.append(summary)
@@ -161,11 +209,16 @@ class TokenReportGenerator:
             
             # Данные по каждому пользователю
             for user_id, data in sorted_users:
+                # Подменяем 'Unknown' на более понятное отображение
+                display_name = data['user_name']
+                if not display_name or str(display_name).strip().lower() in ("unknown", "none", "null", "-"):
+                    # Покажем ID как имя, чтобы было понятно «кто это»
+                    display_name = str(user_id)
                 content.append(Paragraph("=" * 80, normal_style))
                 content.append(Spacer(1, 0.1*inch))
                 
                 user_header = Paragraph(
-                    f"<b>Пользователь:</b> {data['user_name']} (ID: {user_id})",
+                    f"<b>Пользователь:</b> {display_name} (ID: {user_id})",
                     heading_style
                 )
                 content.append(user_header)
@@ -173,9 +226,10 @@ class TokenReportGenerator:
                 # Таблица с токенами
                 token_data = [
                     ['Тип токенов', 'Количество'],
-                    ['Входных токенов', f"{data['input_tokens']:,}"],
-                    ['Выходных токенов', f"{data['output_tokens']:,}"],
-                    ['Общее количество', f"<b>{data['total_tokens']:,}</b>"]
+                    ['Входных токенов', _fmt_num(data['input_tokens'])],
+                    ['Выходных токенов', _fmt_num(data['output_tokens'])],
+                    # Жирный стиль зададим через TableStyle, без HTML-тегов
+                    ['Общее количество', _fmt_num(data['total_tokens'])]
                 ]
                 
                 token_table = Table(token_data, colWidths=[3*inch, 2*inch])
@@ -184,12 +238,15 @@ class TokenReportGenerator:
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                     ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
                     ('FONTSIZE', (0, 0), (-1, 0), 12),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    # Основной шрифт для тела таблицы
+                    ('FONTNAME', (0, 1), (-1, -2), FONT_NORMAL),
+                    # Последнюю строку (итого) делаем жирной
+                    ('FONTNAME', (0, -1), (-1, -1), FONT_BOLD),
                 ]))
                 
                 content.append(token_table)
