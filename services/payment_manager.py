@@ -174,8 +174,8 @@ async def create_one_time_payment(
         amount, currency = await convert_price(price_usd, locale)
         
         # Конвертируем payment_system в payment_method для API
-        # Для разовых платежей (buy) yookassa → yandex_pay
-        payment_method = "yandex_pay" if payment_system == "yookassa" else "paypal"
+        # yookassa и paypal используются напрямую
+        payment_method = payment_system  # "yookassa" или "paypal"
         
         # Извлекаем минуты
         minutes = parse_minutes_from_tariff(tariff_data)
@@ -219,7 +219,9 @@ async def create_one_time_payment(
         })
         
         # Получаем базовый URL API
-        api_base_url = os.getenv("PAYMENT_API_URL", "https://airalo-api.oxem.dev")
+        api_base_url = os.getenv("PAYMENT_API_URL")
+        if not api_base_url:
+            raise Exception("PAYMENT_API_URL не установлен в переменных окружения")
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -361,7 +363,10 @@ async def create_subscription_payment(
             }
         
         # Отправляем запрос
-        api_token = os.getenv("PAYMENT_API_TOKEN", "preview-external-api-secret-2024")
+        api_token = os.getenv("PAYMENT_API_TOKEN")
+        if not api_token:
+            raise Exception("PAYMENT_API_TOKEN не установлен в переменных окружения")
+        
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_token}"
@@ -373,7 +378,9 @@ async def create_subscription_payment(
         })
         
         # Получаем базовый URL API
-        api_base_url = os.getenv("PAYMENT_API_URL", "https://airalo-api.oxem.dev")
+        api_base_url = os.getenv("PAYMENT_API_URL")
+        if not api_base_url:
+            raise Exception("PAYMENT_API_URL не установлен в переменных окружения")
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -459,13 +466,20 @@ async def check_payment_status(payment_id: str) -> dict:
         payment_system = payment_info.get("payment_system")
         
         # Определяем endpoint для проверки
-        api_token = os.getenv("PAYMENT_API_TOKEN", "preview-external-api-secret-2024")
+        api_token = os.getenv("PAYMENT_API_TOKEN")
+        if not api_token:
+            log_payment("ERROR", "PAYMENT_API_TOKEN не установлен в переменных окружения")
+            return {"status": "closed"}
+        
         headers = {
             "Authorization": f"Bearer {api_token}"
         }
         
         # Получаем базовый URL API
-        api_base_url = os.getenv("PAYMENT_API_URL", "https://airalo-api.oxem.dev")
+        api_base_url = os.getenv("PAYMENT_API_URL")
+        if not api_base_url:
+            log_payment("ERROR", "PAYMENT_API_URL не установлен в переменных окружения")
+            return {"status": "closed"}
         
         if payment_type == "one_time":
             # Проверка разового платежа

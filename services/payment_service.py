@@ -16,8 +16,10 @@ class PaymentService:
         self.sandbox_url = "https://esim-sandbox.oxem.dev"
         self.production_url = "https://airalo-api.oxem.dev"
         
-        # Используем sandbox по умолчанию, можно переключить через env
-        self.base_url = os.getenv("PAYMENT_API_URL", self.sandbox_url)
+        # Используем боевой URL из env (обязательно должен быть установлен)
+        self.base_url = os.getenv("PAYMENT_API_URL")
+        if not self.base_url:
+            raise ValueError("PAYMENT_API_URL должен быть установлен в переменных окружения")
         
         # URL нашего webhook endpoint
         self.webhook_url = os.getenv("WEBHOOK_URL", "http://127.0.0.1:8000/api/webhook/payment")
@@ -81,12 +83,23 @@ class PaymentService:
         if self.webhook_auth_token:
             payload["auth_token"] = self.webhook_auth_token
         
+        # Получаем API токен
+        api_token = os.getenv("PAYMENT_API_TOKEN")
+        if not api_token:
+            return {
+                "success": False,
+                "error": "PAYMENT_API_TOKEN не установлен в переменных окружения"
+            }
+        
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{self.base_url}/api/external/payments/create",
                     json=payload,
-                    headers={"Content-Type": "application/json"}
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_token}"
+                    }
                 )
                 
                 if response.status_code == 200:
@@ -130,10 +143,19 @@ class PaymentService:
         Returns:
             Dict со статусом платежа
         """
+        # Получаем API токен
+        api_token = os.getenv("PAYMENT_API_TOKEN")
+        if not api_token:
+            return {
+                "success": False,
+                "error": "PAYMENT_API_TOKEN не установлен в переменных окружения"
+            }
+        
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.base_url}/api/external/payments/{internal_order_id}/status"
+                    f"{self.base_url}/api/external/payments/{internal_order_id}/status",
+                    headers={"Authorization": f"Bearer {api_token}"}
                 )
                 
                 if response.status_code == 200:
