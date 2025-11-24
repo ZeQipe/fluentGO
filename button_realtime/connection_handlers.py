@@ -51,6 +51,7 @@ class ConnectionManager:
                 'processing_duration': 0,  # Длительность обработки
                 'response_start_time': None,  # Начало ответа
                 'response_duration': 0,  # Длительность ответа
+                'bot_audio_duration': 0,  # Суммарная длительность синтезированного аудио ответа
                 'user_id': None,  # ID пользователя для вычета времени
                 'is_authenticated': False,  # Статус авторизации
             'last_ping': time.time(),  # Время последнего ping
@@ -240,6 +241,7 @@ async def calculate_and_deduct_time(connection_manager, client_ip):
         connection['voice_duration'] = 0
         connection['processing_duration'] = 0
         connection['response_duration'] = 0
+        connection['bot_audio_duration'] = 0
 
 async def apply_settings(connection_manager, client_ip):
     """Получает информацию о настройках из БД админки и применяет для данного соединения"""

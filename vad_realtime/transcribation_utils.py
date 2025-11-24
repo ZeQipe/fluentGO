@@ -36,7 +36,8 @@ async def process_audio_chunk(connection_manager, client_ip: str, chunk: bytes):
                 'processing_start_time': None,
                 'processing_duration': 0,
                 'response_start_time': None,
-                'response_duration': 0
+                'response_duration': 0,
+                'bot_audio_duration': 0  # длительность синтезированного ответа (секунды)
             })
             connection['audio_buffer'] = io.BytesIO()
             await connection_manager.send_text(client_ip, "Voice detected. Clearing playback queue.")

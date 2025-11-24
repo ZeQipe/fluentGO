@@ -108,6 +108,13 @@ class AsyncOpenAIAgent:
             audio = base64.b64decode(message.delta)
             (response_audio, duration) = await process_audio(audio)
             await play_queue.put((response_audio, duration))
+            # Копим длительность синтезированного ответа для отчета
+            try:
+                current = await self.handler.get_property(self.client_ip, 'bot_audio_duration')
+                current = current or 0
+                await self.handler.set_property(self.client_ip, 'bot_audio_duration', current + (duration or 0))
+            except Exception:
+                pass
 
         elif message.type == "response.audio_transcript.done":
             # await self.handler.add_assistant_message(self.client_ip, message.transcript)
@@ -137,8 +144,15 @@ class AsyncOpenAIAgent:
                         output_tokens = getattr(usage, 'output_tokens', 0)
                         total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
                         
-                        # Логируем
-                        token_logger.log_tokens(user_id, user_name, input_tokens, output_tokens, total_tokens)
+                        # Получаем длительности для отчета
+                        incoming_seconds = await self.handler.get_property(self.client_ip, 'voice_duration') or 0
+                        outgoing_seconds = await self.handler.get_property(self.client_ip, 'bot_audio_duration') or 0
+                        
+                        # Логируем с длительностями
+                        token_logger.log_tokens(
+                            user_id, user_name, input_tokens, output_tokens, total_tokens,
+                            incoming_seconds=incoming_seconds, outgoing_seconds=outgoing_seconds
+                        )
             except Exception as e:
                 logger.error(f"Ошибка логирования токенов: {e}")
             

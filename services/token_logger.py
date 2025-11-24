@@ -13,15 +13,24 @@ class TokenLogger:
         user_name: str, 
         input_tokens: int, 
         output_tokens: int, 
-        total_tokens: int
+        total_tokens: int,
+        incoming_seconds: float = 0.0,
+        outgoing_seconds: float = 0.0
     ):
         """
         Записать использование токенов
         
-        Формат: {user_id}/{user_name}/{input_tokens}/{output_tokens}/{total_tokens}
+        Формат (новый):
+            {user_id}/{user_name}/{input_tokens}/{output_tokens}/{total_tokens}/{incoming_seconds}/{outgoing_seconds}
+        
+        Обратная совместимость:
+            Старые записи без секунд остаются валидными (парсер поддерживает оба формата).
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"[{timestamp}] {user_id}/{user_name}/{input_tokens}/{output_tokens}/{total_tokens}\n"
+        # Приводим секунды к целому числу для компактности лога
+        in_sec = int(round(incoming_seconds or 0))
+        out_sec = int(round(outgoing_seconds or 0))
+        log_entry = f"[{timestamp}] {user_id}/{user_name}/{input_tokens}/{output_tokens}/{total_tokens}/{in_sec}/{out_sec}\n"
         
         try:
             with open(self.log_file, "a", encoding="utf-8") as f:

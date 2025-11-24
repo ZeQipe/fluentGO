@@ -65,7 +65,9 @@ class TokenReportGenerator:
                 "user_name": "John",
                 "input_tokens": 1000,
                 "output_tokens": 500,
-                "total_tokens": 1500
+                "total_tokens": 1500,
+                "incoming_seconds": 0,   # суммарная длительность входящих (голос пользователя), сек
+                "outgoing_seconds": 0    # суммарная длительность исходящих (аудио бота), сек
             }
         }
         """
@@ -73,7 +75,9 @@ class TokenReportGenerator:
             "user_name": "Unknown",
             "input_tokens": 0,
             "output_tokens": 0,
-            "total_tokens": 0
+            "total_tokens": 0,
+            "incoming_seconds": 0,
+            "outgoing_seconds": 0
         })
         
         if not os.path.exists(self.tokens_file):
@@ -107,12 +111,17 @@ class TokenReportGenerator:
                                 input_tokens = int(parts[2].strip())
                                 output_tokens = int(parts[3].strip())
                                 total_tokens = int(parts[4].strip())
+                                # Новые поля (могут отсутствовать в старых записях)
+                                incoming_seconds = int(float(parts[5].strip())) if len(parts) >= 6 else 0
+                                outgoing_seconds = int(float(parts[6].strip())) if len(parts) >= 7 else 0
                                 
                                 # Суммируем токены
                                 users_data[user_id]["user_name"] = user_name
                                 users_data[user_id]["input_tokens"] += input_tokens
                                 users_data[user_id]["output_tokens"] += output_tokens
                                 users_data[user_id]["total_tokens"] += total_tokens
+                                users_data[user_id]["incoming_seconds"] += incoming_seconds
+                                users_data[user_id]["outgoing_seconds"] += outgoing_seconds
                     
                     except Exception as e:
                         # Пропускаем некорректные строки
@@ -198,10 +207,14 @@ class TokenReportGenerator:
             total_input = sum(u[1]['input_tokens'] for u in sorted_users)
             total_output = sum(u[1]['output_tokens'] for u in sorted_users)
             total_all = sum(u[1]['total_tokens'] for u in sorted_users)
+            total_incoming_sec = sum(u[1]['incoming_seconds'] for u in sorted_users)
+            total_outgoing_sec = sum(u[1]['outgoing_seconds'] for u in sorted_users)
             
             summary = Paragraph(
                 f"<b>Общая статистика:</b> {len(users_data)} пользователей, "
-                f"{_fmt_num(total_all)} токенов",
+                f"{_fmt_num(total_all)} токенов; "
+                f"входящих {_fmt_num(total_incoming_sec)} сек, "
+                f"исходящих {_fmt_num(total_outgoing_sec)} сек",
                 heading_style
             )
             content.append(summary)
@@ -229,7 +242,10 @@ class TokenReportGenerator:
                     ['Входных токенов', _fmt_num(data['input_tokens'])],
                     ['Выходных токенов', _fmt_num(data['output_tokens'])],
                     # Жирный стиль зададим через TableStyle, без HTML-тегов
-                    ['Общее количество', _fmt_num(data['total_tokens'])]
+                    ['Общее количество', _fmt_num(data['total_tokens'])],
+                    ['Время входящих, сек', _fmt_num(data.get('incoming_seconds', 0))],
+                    ['Время исходящих, сек', _fmt_num(data.get('outgoing_seconds', 0))],
+                    ['Итого время, сек', _fmt_num((data.get('incoming_seconds', 0) or 0) + (data.get('outgoing_seconds', 0) or 0))]
                 ]
                 
                 token_table = Table(token_data, colWidths=[3*inch, 2*inch])

@@ -113,6 +113,16 @@ class AsyncOpenAIAgent:
             audio = base64.b64decode(message.delta)
             (response_audio, duration) = await process_audio(audio)
             await play_queue.put((response_audio, duration))
+            # Копим длительность синтезированного ответа для текущего запроса
+            try:
+                connection = self.handler.connections.get(self.client_ip)
+                if connection and hasattr(self, 'current_request_id') and self.current_request_id:
+                    for request in connection['time_tracking_queue']:
+                        if request['request_id'] == self.current_request_id:
+                            request['bot_audio_duration'] = request.get('bot_audio_duration', 0) + (duration or 0)
+                            break
+            except Exception:
+                pass
 
         elif message.type == "response.audio_transcript.done":
             # await self.handler.add_assistant_message(self.client_ip, message.transcript)
@@ -148,8 +158,20 @@ class AsyncOpenAIAgent:
                         output_tokens = getattr(usage, 'output_tokens', 0)
                         total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
                         
-                        # Логируем
-                        token_logger.log_tokens(user_id, user_name, input_tokens, output_tokens, total_tokens)
+                        # Длительности для отчета
+                        incoming_seconds = 0
+                        outgoing_seconds = 0
+                        if connection and hasattr(self, 'current_request_id') and self.current_request_id:
+                            for request in connection['time_tracking_queue']:
+                                if request['request_id'] == self.current_request_id:
+                                    incoming_seconds = request.get('voice_duration', 0) or 0
+                                    outgoing_seconds = request.get('bot_audio_duration', 0) or 0
+                                    break
+                        # Логируем с длительностями
+                        token_logger.log_tokens(
+                            user_id, user_name, input_tokens, output_tokens, total_tokens,
+                            incoming_seconds=incoming_seconds, outgoing_seconds=outgoing_seconds
+                        )
             except Exception as e:
                 logger.error(f"Ошибка логирования токенов: {e}")
             
