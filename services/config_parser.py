@@ -194,8 +194,156 @@ class ConfigDataParser:
         self._cache_timestamp = None
 
 
-# Глобальный экземпляр парсера
+class TariffsParser:
+    """Парсер для TariffsData.txt с тарифами"""
+    
+    # Флаг начала нового тарифа
+    FLAG_TARIFF = "-> Tariff"
+    
+    # Время жизни кэша (в секундах)
+    CACHE_TTL = 60
+    
+    def __init__(self, file_path: str = "document/TariffsData.txt"):
+        self.file_path = file_path
+        self._cache: Optional[List[Dict]] = None
+        self._cache_timestamp: Optional[datetime] = None
+    
+    def _is_cache_valid(self) -> bool:
+        """Проверяет валидность кэша"""
+        if self._cache is None or self._cache_timestamp is None:
+            return False
+        return (datetime.now() - self._cache_timestamp).total_seconds() < self.CACHE_TTL
+    
+    def _read_file(self) -> str:
+        """Читает файл TariffsData.txt"""
+        if not os.path.exists(self.file_path):
+            raise FileNotFoundError(f"Файл {self.file_path} не найден")
+        
+        with open(self.file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    
+    def _parse_value(self, value: str, key: str):
+        """Преобразует строковое значение в нужный тип"""
+        value = value.strip()
+        
+        # Boolean поля
+        if key in ["disabled", "popular"]:
+            return value.lower() == "true"
+        
+        # Списки (statuses)
+        if key == "statuses":
+            if not value:
+                return []
+            return [s.strip() for s in value.split(",") if s.strip()]
+        
+        # Остальные поля - строки
+        return value
+    
+    def _parse_tariff_block(self, block: str) -> Optional[Dict]:
+        """Парсит один блок тарифа"""
+        lines = block.strip().split("\n")
+        if not lines:
+            return None
+        
+        tariff = {}
+        features = []
+        parsing_features = False
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Проверяем начало секции features
+            if "<>" in line and not parsing_features:
+                parts = line.split("<>", 1)
+                key = parts[0].strip()
+                value = parts[1].strip() if len(parts) > 1 else ""
+                
+                if key == "features":
+                    parsing_features = True
+                    continue
+                else:
+                    tariff[key] = self._parse_value(value, key)
+            
+            # Если парсим features - каждая строка это фича
+            elif parsing_features:
+                if line and not line.startswith("->"):
+                    features.append({
+                        "text": line,
+                        "included": True
+                    })
+        
+        # Добавляем features в тариф (если нет - пустой массив)
+        tariff["features"] = features if features else []
+        
+        # Валидация: обязательные поля
+        required_fields = ["id", "name", "price", "period", "tariff", "type"]
+        if not all(field in tariff for field in required_fields):
+            return None
+        
+        # Добавляем дефолтные значения для опциональных полей если их нет
+        if "statuses" not in tariff:
+            tariff["statuses"] = []
+        if "buttonText" not in tariff:
+            tariff["buttonText"] = "Start"
+        if "buttonType" not in tariff:
+            tariff["buttonType"] = "secondary"
+        if "disabled" not in tariff:
+            tariff["disabled"] = False
+        if "popular" not in tariff:
+            tariff["popular"] = False
+        if "popularLabel" not in tariff:
+            tariff["popularLabel"] = ""
+        
+        # Удаляем пустые строки из необязательных полей
+        if tariff.get("popularLabel") == "":
+            tariff["popularLabel"] = ""
+        
+        return tariff
+    
+    def parse_all(self, use_cache: bool = True) -> List[Dict]:
+        """
+        Парсит весь файл и возвращает список тарифов.
+        
+        Returns:
+            List[Dict] со всеми тарифами
+        """
+        # Проверяем кэш
+        if use_cache and self._is_cache_valid():
+            return self._cache.copy()
+        
+        # Читаем файл
+        content = self._read_file()
+        
+        # Разбиваем на блоки по флагу "-> Tariff"
+        blocks = re.split(f"^{re.escape(self.FLAG_TARIFF)}$", content, flags=re.MULTILINE)
+        
+        tariffs = []
+        for block in blocks[1:]:  # Пропускаем первый пустой блок
+            tariff = self._parse_tariff_block(block)
+            if tariff:
+                tariffs.append(tariff)
+        
+        # Сохраняем в кэш
+        self._cache = tariffs
+        self._cache_timestamp = datetime.now()
+        
+        return tariffs
+    
+    def get_tariffs(self, use_cache: bool = True) -> List[Dict]:
+        """Получает все тарифы"""
+        return self.parse_all(use_cache)
+    
+    def clear_cache(self):
+        """Очищает кэш (полезно при обновлении файла)"""
+        self._cache = None
+        self._cache_timestamp = None
+
+
+# Глобальные экземпляры парсеров
 _config_parser = None
+_tariffs_parser = None
 
 def get_config_parser(file_path: str = "document/ConfigData.txt") -> ConfigDataParser:
     """Получает глобальный экземпляр парсера (singleton)"""
@@ -203,4 +351,11 @@ def get_config_parser(file_path: str = "document/ConfigData.txt") -> ConfigDataP
     if _config_parser is None or _config_parser.file_path != file_path:
         _config_parser = ConfigDataParser(file_path)
     return _config_parser
+
+def get_tariffs_parser(file_path: str = "document/TariffsData.txt") -> TariffsParser:
+    """Получает глобальный экземпляр парсера тарифов (singleton)"""
+    global _tariffs_parser
+    if _tariffs_parser is None or _tariffs_parser.file_path != file_path:
+        _tariffs_parser = TariffsParser(file_path)
+    return _tariffs_parser
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from database import db_handler
 from pydantic import BaseModel
 from typing import Optional
+from services.config_parser import get_tariffs_parser
 import json
 
 router = APIRouter()
@@ -35,9 +36,9 @@ class UpdateUserStatusRequest(BaseModel):
 async def get_crm_tariffs():
     """CRM: Получение списка тарифов"""
     try:
-        # Загружаем тарифы из файла
-        with open("document/tariffs.json", "r", encoding="utf-8") as f:
-            tariffs_data = json.load(f)
+        # Загружаем тарифы из TariffsData.txt через парсер
+        parser = get_tariffs_parser()
+        tariffs_data = parser.get_tariffs()
         
         return {
             "status": "success",

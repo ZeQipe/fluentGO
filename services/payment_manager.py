@@ -64,7 +64,7 @@ def parse_minutes_from_tariff(tariff_data: dict) -> int:
     Извлекает количество минут из features тарифа
     
     Args:
-        tariff_data: Данные тарифа из tariffs.json
+        tariff_data: Данные тарифа из TariffsData.txt
         
     Returns:
         Количество минут (0 если не найдено)

@@ -6,7 +6,7 @@ from services.payment_service import payment_service
 from services import payment_manager
 from services.language_cache import language_cache, exchange_rate_cache
 from services.report_generator import report_generator
-from services.config_parser import get_config_parser
+from services.config_parser import get_config_parser, get_tariffs_parser
 import jwt
 import os
 from dotenv import load_dotenv
@@ -299,9 +299,9 @@ async def check_auth(request: Request):
 async def get_tariffs(request: Request):
     """Получение доступных тарифов с учетом текущего тарифа пользователя"""
     try:
-        # Загружаем тарифы из файла
-        with open("document/tariffs.json", "r", encoding="utf-8") as f:
-            tariffs_data = json.load(f)
+        # Загружаем тарифы из TariffsData.txt через парсер
+        parser = get_tariffs_parser()
+        tariffs_data = parser.get_tariffs()
         
         # Получаем JWT токен из куков
         token = request.cookies.get("auth_token_jwt")
@@ -1303,7 +1303,7 @@ async def purchase_subscription(request: Request, data: PurchaseSubscriptionRequ
     Создание платежа для покупки тарифа
     
     Принимает:
-        - tariff_id: ID тарифа из tariffs.json
+        - tariff_id: ID тарифа из TariffsData.txt
         - payment_system: "yookassa" или "paypal"
     
     Возвращает:
@@ -1333,12 +1333,12 @@ async def purchase_subscription(request: Request, data: PurchaseSubscriptionRequ
                 detail="Некорректная платежная система. Допустимые значения: yookassa, paypal"
             )
         
-        # 3. Загружаем тарифы из файла
+        # 3. Загружаем тарифы из TariffsData.txt через парсер
         try:
-            with open("document/tariffs.json", "r", encoding="utf-8") as f:
-                tariffs_data = json.load(f)
+            parser = get_tariffs_parser()
+            tariffs_data = parser.get_tariffs()
         except Exception as e:
-            payment_manager.log_payment("ERROR", f"Ошибка чтения tariffs.json: {str(e)}")
+            payment_manager.log_payment("ERROR", f"Ошибка чтения TariffsData.txt: {str(e)}")
             raise HTTPException(status_code=500, detail="Ошибка загрузки тарифов")
         
         # 4. Находим тариф по ID

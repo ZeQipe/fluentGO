@@ -1,0 +1,116 @@
+-> Tariff
+id <> free-guest
+name <> Free Guest
+price <> $0
+period <> /mo
+type <> free
+statuses <> 
+tariff <> free
+buttonText <> Current
+buttonType <> standard
+disabled <> false
+popular <> false
+popularLabel <> 
+features <>
+1 demo dialogue (2 minutes)
+Basic topics
+Voice messages
+No registration required
+
+-> Tariff
+id <> pay-as-you-go
+name <> Pay-as-you-go
+price <> $15
+period <> /100 min
+type <> one-time
+statuses <> 
+tariff <> pay-as-you-go
+buttonText <> Buy
+buttonType <> secondary
+disabled <> false
+popular <> true
+popularLabel <> Popular
+features <>
+100 minutes of conversation
+All topics and scenarios
+Real-time + voice messages
+Detailed analytics
+Minutes never expire
+
+-> Tariff
+id <> standart
+name <> Standard Subscription
+price <> $9
+period <> /mo
+type <> subscription
+statuses <> 
+tariff <> standart
+buttonText <> Start
+buttonType <> secondary
+disabled <> false
+popular <> false
+popularLabel <> 
+features <>
+Priority support
+Custom scenarios
+Export dialogues
+Advanced analytics
+50 min/month
+
+-> Tariff
+id <> pro
+name <> PRO Subscription
+price <> $29
+period <> /mo
+type <> subscription
+statuses <> 
+tariff <> pro
+buttonText <> Start
+buttonType <> secondary
+disabled <> false
+popular <> false
+popularLabel <> 
+features <>
+Priority support
+Custom scenarios
+Export dialogues
+Advanced analytics
+200 min/month
+
+-> Tariff
+id <> pro-plus
+name <> PRO + Subscription
+price <> $14.5
+period <> /mo
+type <> subscription
+statuses <> vip
+tariff <> pro-plus
+buttonText <> Start
+buttonType <> secondary
+disabled <> false
+popular <> false
+popularLabel <> 
+features <>
+Priority support
+Custom scenarios
+Export dialogues
+Advanced analytics
+
+-> Tariff
+id <> Only cmo-subscription
+name <> CMO Subscription
+price <> $10
+period <> /mo
+type <> subscription
+statuses <> CMO
+tariff <> cmo
+buttonText <> Start
+buttonType <> secondary
+disabled <> false
+popular <> false
+popularLabel <> 
+features <>
+All topics and scenarios
+Real-time + voice messages
+Priority support
+

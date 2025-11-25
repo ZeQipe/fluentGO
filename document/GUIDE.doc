@@ -1,0 +1,509 @@
+﻿
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>Converted from Markdown</title>
+        <!--[if gte mso 9]>
+        <xml>
+          <w:WordDocument>
+            <w:View>Print</w:View>
+            <w:Zoom>90</w:Zoom>
+            <w:DoNotPromptForConvert/>
+            <w:DoNotShowInsertAsIcon/>
+          </w:WordDocument>
+        </xml>
+        <![endif]-->
+        <style>
+          @page {
+            size: A4;
+            margin: 2.54cm;
+          }
+          body { 
+            font-family: 'Times New Roman', serif; 
+            font-size: 12pt;
+            line-height: 1.5; 
+            margin: 0;
+            padding: 0;
+            color: #000;
+          }
+          h1 { font-size: 18pt; font-weight: bold; margin: 12pt 0 6pt 0; }
+          h2 { font-size: 16pt; font-weight: bold; margin: 12pt 0 6pt 0; }
+          h3 { font-size: 14pt; font-weight: bold; margin: 12pt 0 6pt 0; }
+          p { margin: 6pt 0; }
+          code { 
+            font-family: 'Courier New', monospace;
+            background-color: #f5f5f5;
+            padding: 2pt;
+            border: 1pt solid #ddd;
+          }
+          pre { 
+            font-family: 'Courier New', monospace;
+            background-color: #f5f5f5;
+            padding: 6pt;
+            border: 1pt solid #ddd;
+            margin: 6pt 0;
+            white-space: pre-wrap;
+          }
+          blockquote { 
+            border-left: 3pt solid #ccc;
+            margin: 6pt 0;
+            padding-left: 12pt;
+            font-style: italic;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 6pt 0;
+          }
+          th, td {
+            border: 1pt solid #000;
+            padding: 3pt 6pt;
+            text-align: left;
+          }
+          th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+          }
+          ul, ol {
+            margin: 6pt 0;
+            padding-left: 24pt;
+          }
+          li {
+            margin: 3pt 0;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Руководство по редактированию контента FluentGO</h1>
+<h2>📋 Содержание</h2>
+<ol>
+<li><a href="#%D0%BE%D0%B1%D1%89%D0%B8%D0%B5-%D0%BF%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0">Общие правила</a></li>
+<li><a href="#%D1%84%D0%B0%D0%B9%D0%BB-configdatatxt">Файл ConfigData.txt</a></li>
+<li><a href="#%D1%84%D0%B0%D0%B9%D0%BB-tariffsdatatxt">Файл TariffsData.txt</a></li>
+<li><a href="#%D1%87%D0%B0%D1%81%D1%82%D0%BE-%D0%B7%D0%B0%D0%B4%D0%B0%D0%B2%D0%B0%D0%B5%D0%BC%D1%8B%D0%B5-%D0%B2%D0%BE%D0%BF%D1%80%D0%BE%D1%81%D1%8B">Часто задаваемые вопросы</a></li>
+</ol>
+<hr>
+<h2>⚠️ Общие правила</h2>
+<h3>🔴 КРИТИЧНО ВАЖНО:</h3>
+<ol>
+<li><strong>Язык заполнения:</strong> ТОЛЬКО английский</li>
+<li><strong>Названия файлов:</strong> СТРОГО как указано (не менять!)<ul>
+<li><code>ConfigData.txt</code> — именно так, с большой буквы C и D</li>
+<li><code>TariffsData.txt</code> — именно так, с большой буквы T и D</li>
+</ul>
+</li>
+<li><strong>Расположение:</strong> Файлы должны находиться в папке <code>document/</code></li>
+<li><strong>Кодировка:</strong> UTF-8 (сохраняйте в Notepad++ или VSCode)</li>
+</ol>
+<h3>✅ Что можно делать:</h3>
+<ul>
+<li>Редактировать текст</li>
+<li>Добавлять новые блоки</li>
+<li>Удалять ненужные блоки</li>
+<li>Менять порядок блоков</li>
+</ul>
+<h3>❌ Что нельзя делать:</h3>
+<ul>
+<li>Менять названия ключей (например, <code>id &lt;&gt;</code>, <code>name &lt;&gt;</code>)</li>
+<li>Удалять обязательные ключи</li>
+<li>Использовать русский язык в контенте</li>
+<li>Менять названия файлов</li>
+<li>Менять формат разделителей (<code>&lt;&gt;</code>, <code>-&gt;</code>)</li>
+</ul>
+<hr>
+<h2>📄 Файл ConfigData.txt</h2>
+<p><strong>Расположение:</strong> <code>document/ConfigData.txt</code></p>
+<p>Этот файл содержит три секции:</p>
+<ul>
+<li><strong>Topics</strong> — темы для диалогов</li>
+<li><strong>Help</strong> — вопросы и ответы (FAQ)</li>
+<li><strong>Media</strong> — ссылка на видео</li>
+</ul>
+<h3>Структура файла:</h3>
+<pre><code>-&gt; Topic
+Заголовок темы
+Описание темы (может быть несколько строк)
+
+-&gt; Topic
+Следующая тема
+Её описание
+
+-&gt; Help
+Вопрос
+Ответ на вопрос
+
+-&gt; Media
+https://ссылка-на-видео.com
+</code></pre>
+<hr>
+<h3>🎯 Секция Topics (Темы)</h3>
+<p><strong>Формат:</strong></p>
+<pre><code>-&gt; Topic
+Заголовок темы
+Описание темы
+</code></pre>
+<p><strong>Пример:</strong></p>
+<pre><code>-&gt; Topic
+Business Meeting
+Learn how to conduct professional meetings and negotiations in English
+
+-&gt; Topic
+Airport &amp; Travel
+Essential phrases for traveling, booking tickets, and checking in at airports
+
+-&gt; Topic
+Restaurant &amp; Food
+Order food, make reservations, and discuss menu items confidently
+</code></pre>
+<p><strong>Правила:</strong></p>
+<ul>
+<li>Начинайте новую тему с <code>-&gt; Topic</code></li>
+<li>Первая строка после флага — заголовок</li>
+<li>Вторая строка (и далее) — описание</li>
+<li>Между темами оставляйте <strong>одну пустую строку</strong></li>
+</ul>
+<hr>
+<h3>❓ Секция Help (FAQ)</h3>
+<p><strong>Формат:</strong></p>
+<pre><code>-&gt; Help
+Вопрос
+Ответ
+</code></pre>
+<p><strong>Пример:</strong></p>
+<pre><code>-&gt; Help
+How do I start a conversation?
+Click the &quot;Start&quot; button on your chosen tariff plan and begin speaking
+
+-&gt; Help
+Can I change topics during conversation?
+Yes, you can switch topics at any time through the settings menu
+
+-&gt; Help
+What if I make mistakes?
+Our AI tutor gently corrects mistakes and helps you improve naturally
+</code></pre>
+<p><strong>Правила:</strong></p>
+<ul>
+<li>Начинайте новый вопрос с <code>-&gt; Help</code></li>
+<li>Первая строка — вопрос</li>
+<li>Вторая строка (и далее) — ответ</li>
+<li>Между вопросами оставляйте <strong>одну пустую строку</strong></li>
+</ul>
+<hr>
+<h3>🎥 Секция Media (Видео)</h3>
+<p><strong>Формат:</strong></p>
+<pre><code>-&gt; Media
+https://полная-ссылка-на-видео.com
+</code></pre>
+<p><strong>Пример:</strong></p>
+<pre><code>-&gt; Media
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+</code></pre>
+<p><strong>Правила:</strong></p>
+<ul>
+<li>Только одна ссылка</li>
+<li>Полный URL начиная с <code>https://</code></li>
+</ul>
+<hr>
+<h3>✏️ Полный шаблон ConfigData.txt</h3>
+<pre><code>-&gt; Topic
+Business Negotiations
+Master the art of professional negotiations and business discussions
+
+-&gt; Topic
+Daily Conversations
+Practice everyday situations like shopping, asking directions, and small talk
+
+-&gt; Topic
+Job Interview
+Prepare for English job interviews with confidence
+
+-&gt; Help
+How does the free trial work?
+The free trial gives you 2 minutes to test all features without registration
+
+-&gt; Help
+Can I pause my subscription?
+Yes, you can pause or cancel your subscription at any time from settings
+
+-&gt; Media
+https://www.youtube.com/watch?v=your-video-id
+</code></pre>
+<hr>
+<h2>💳 Файл TariffsData.txt</h2>
+<p><strong>Расположение:</strong> <code>document/TariffsData.txt</code></p>
+<p>Этот файл содержит все тарифные планы.</p>
+<h3>Структура одного тарифа:</h3>
+<pre><code>-&gt; Tariff
+id &lt;&gt; уникальный-идентификатор
+name &lt;&gt; Название тарифа
+price &lt;&gt; $цена
+period &lt;&gt; /период
+type &lt;&gt; тип-тарифа
+statuses &lt;&gt; статусы (если есть)
+tariff &lt;&gt; внутреннее-название
+buttonText &lt;&gt; Текст кнопки
+buttonType &lt;&gt; тип-кнопки
+disabled &lt;&gt; false
+popular &lt;&gt; false
+popularLabel &lt;&gt; метка (если есть)
+features &lt;&gt;
+Первая фича тарифа
+Вторая фича тарифа
+Третья фича тарифа
+</code></pre>
+<hr>
+<h3>📝 Описание полей</h3>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Обязательно</th>
+<th>Описание</th>
+<th>Пример значения</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>✅ Да</td>
+<td>Уникальный ID (латиница, можно дефисы)</td>
+<td><code>free-guest</code>, <code>pro-plus</code></td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>✅ Да</td>
+<td>Название для пользователя</td>
+<td><code>Free Guest</code>, <code>PRO Subscription</code></td>
+</tr>
+<tr>
+<td><code>price</code></td>
+<td>✅ Да</td>
+<td>Цена (с символом валюты)</td>
+<td><code>$0</code>, <code>$15</code>, <code>$29</code></td>
+</tr>
+<tr>
+<td><code>period</code></td>
+<td>✅ Да</td>
+<td>Период (в месяц, за минуты)</td>
+<td><code>/mo</code>, <code>/100 min</code></td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>✅ Да</td>
+<td>Тип тарифа</td>
+<td><code>free</code>, <code>one-time</code>, <code>subscription</code></td>
+</tr>
+<tr>
+<td><code>statuses</code></td>
+<td>✅ Да</td>
+<td>Кому доступен (пусто = всем)</td>
+<td>пусто, <code>vip</code>, <code>CMO</code></td>
+</tr>
+<tr>
+<td><code>tariff</code></td>
+<td>✅ Да</td>
+<td>Системное название</td>
+<td><code>free</code>, <code>standart</code>, <code>pro</code></td>
+</tr>
+<tr>
+<td><code>buttonText</code></td>
+<td>✅ Да</td>
+<td>Текст на кнопке</td>
+<td><code>Start</code>, <code>Buy</code>, <code>Current</code></td>
+</tr>
+<tr>
+<td><code>buttonType</code></td>
+<td>✅ Да</td>
+<td>Тип кнопки</td>
+<td><code>standard</code>, <code>secondary</code></td>
+</tr>
+<tr>
+<td><code>disabled</code></td>
+<td>✅ Да</td>
+<td>Отключен ли</td>
+<td><code>false</code> или <code>true</code></td>
+</tr>
+<tr>
+<td><code>popular</code></td>
+<td>✅ Да</td>
+<td>Популярный ли</td>
+<td><code>false</code> или <code>true</code></td>
+</tr>
+<tr>
+<td><code>popularLabel</code></td>
+<td>✅ Да</td>
+<td>Метка &quot;Popular&quot;</td>
+<td>пусто или <code>Popular</code></td>
+</tr>
+<tr>
+<td><code>features</code></td>
+<td>✅ Да</td>
+<td>Список возможностей (каждая с новой строки)</td>
+<td>см. пример ниже</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>🎨 Типы тарифов (type)</h3>
+<ul>
+<li><strong><code>free</code></strong> — бесплатный тариф (демо)</li>
+<li><strong><code>one-time</code></strong> — разовая покупка (несгораемые минуты)</li>
+<li><strong><code>subscription</code></strong> — подписка (ежемесячный платеж)</li>
+</ul>
+<h3>🔘 Типы кнопок (buttonType)</h3>
+<ul>
+<li><strong><code>standard</code></strong> — обычная кнопка (серая)</li>
+<li><strong><code>secondary</code></strong> — акцентная кнопка (цветная)</li>
+</ul>
+<h3>👤 Статусы (statuses)</h3>
+<p>Если поле <strong>пустое</strong> — тариф доступен всем.
+Если указан статус (например, <code>vip</code> или <code>CMO</code>) — только для пользователей с этим статусом.</p>
+<hr>
+<h3>✏️ Полный шаблон одного тарифа</h3>
+<pre><code>-&gt; Tariff
+id &lt;&gt; free-guest
+name &lt;&gt; Free Guest
+price &lt;&gt; $0
+period &lt;&gt; /mo
+type &lt;&gt; free
+statuses &lt;&gt; 
+tariff &lt;&gt; free
+buttonText &lt;&gt; Start
+buttonType &lt;&gt; secondary
+disabled &lt;&gt; false
+popular &lt;&gt; false
+popularLabel &lt;&gt; 
+features &lt;&gt;
+1 demo dialogue (2 minutes)
+Basic topics
+Voice messages
+No registration required
+</code></pre>
+<hr>
+<h3>📦 Пример: Полный файл с тремя тарифами</h3>
+<pre><code>-&gt; Tariff
+id &lt;&gt; free-guest
+name &lt;&gt; Free Guest
+price &lt;&gt; $0
+period &lt;&gt; /mo
+type &lt;&gt; free
+statuses &lt;&gt; 
+tariff &lt;&gt; free
+buttonText &lt;&gt; Start
+buttonType &lt;&gt; secondary
+disabled &lt;&gt; false
+popular &lt;&gt; false
+popularLabel &lt;&gt; 
+features &lt;&gt;
+1 demo dialogue (2 minutes)
+Basic topics
+Voice messages
+No registration required
+
+-&gt; Tariff
+id &lt;&gt; pay-as-you-go
+name &lt;&gt; Pay-as-you-go
+price &lt;&gt; $15
+period &lt;&gt; /100 min
+type &lt;&gt; one-time
+statuses &lt;&gt; 
+tariff &lt;&gt; pay-as-you-go
+buttonText &lt;&gt; Buy
+buttonType &lt;&gt; secondary
+disabled &lt;&gt; false
+popular &lt;&gt; true
+popularLabel &lt;&gt; Popular
+features &lt;&gt;
+100 minutes of conversation
+All topics and scenarios
+Real-time + voice messages
+Detailed analytics
+Minutes never expire
+
+-&gt; Tariff
+id &lt;&gt; pro
+name &lt;&gt; PRO Subscription
+price &lt;&gt; $29
+period &lt;&gt; /mo
+type &lt;&gt; subscription
+statuses &lt;&gt; 
+tariff &lt;&gt; pro
+buttonText &lt;&gt; Start
+buttonType &lt;&gt; secondary
+disabled &lt;&gt; false
+popular &lt;&gt; false
+popularLabel &lt;&gt; 
+features &lt;&gt;
+Priority support
+Custom scenarios
+Export dialogues
+Advanced analytics
+200 min/month
+</code></pre>
+<hr>
+<h2>❓ Часто задаваемые вопросы</h2>
+<h3>1. Можно ли использовать русский язык?</h3>
+<p>❌ <strong>НЕТ!</strong> Все тексты должны быть <strong>ТОЛЬКО</strong> на английском языке.</p>
+<h3>2. Можно ли переименовать файлы?</h3>
+<p>❌ <strong>НЕТ!</strong> Названия файлов строго фиксированы:</p>
+<ul>
+<li><code>ConfigData.txt</code></li>
+<li><code>TariffsData.txt</code></li>
+</ul>
+<h3>3. Что делать, если поле пустое?</h3>
+<p>Оставить пустым, но <strong>ключ обязательно должен быть</strong>:</p>
+<pre><code>statuses &lt;&gt; 
+popularLabel &lt;&gt; 
+</code></pre>
+<h3>4. Как добавить новую тему?</h3>
+<p>Скопируйте блок:</p>
+<pre><code>-&gt; Topic
+Your Topic Title
+Your topic description
+</code></pre>
+<p>Вставьте в нужное место, оставив <strong>одну пустую строку</strong> между темами.</p>
+<h3>5. Как сделать тариф популярным?</h3>
+<p>Установите:</p>
+<pre><code>popular &lt;&gt; true
+popularLabel &lt;&gt; Popular
+</code></pre>
+<h3>6. Как добавить больше фич в тариф?</h3>
+<p>После строки <code>features &lt;&gt;</code> добавляйте по одной фиче на строку:</p>
+<pre><code>features &lt;&gt;
+Feature 1
+Feature 2
+Feature 3
+Feature 4
+</code></pre>
+<h3>7. Что если я случайно удалю ключ?</h3>
+<p>Система не загрузит этот блок. Обязательно проверьте, что все ключи на месте.</p>
+<h3>8. В какой программе редактировать?</h3>
+<p>Рекомендуется:</p>
+<ul>
+<li><strong>Notepad++</strong> (Windows)</li>
+<li><strong>VSCode</strong> (все платформы)</li>
+<li><strong>Sublime Text</strong> (все платформы)</li>
+</ul>
+<p>Не используйте Microsoft Word — он может испортить форматирование!</p>
+<h3>9. Как проверить, что всё правильно?</h3>
+<p>После изменений перезапустите сервер. Если изменения не применились — проверьте:</p>
+<ul>
+<li>Нет ли лишних пробелов в ключах</li>
+<li>Все ли обязательные поля заполнены</li>
+<li>Есть ли разделитель <code>&lt;&gt;</code> между ключом и значением</li>
+<li>Есть ли флаг <code>-&gt;</code> в начале блока</li>
+</ul>
+<h3>10. Что означает <code>&lt;&gt;</code> и <code>-&gt;</code>?</h3>
+<ul>
+<li><code>&lt;&gt;</code> — разделитель между ключом и значением (НЕ МЕНЯТЬ!)</li>
+<li><code>-&gt;</code> — флаг начала нового блока (НЕ МЕНЯТЬ!)</li>
+</ul>
+<hr>
+<h2>📞 Поддержка</h2>
+<p>Если возникли проблемы или вопросы — обратитесь к разработчику проекта.</p>
+<p><strong>Важно:</strong> Перед изменением файлов сделайте резервную копию!</p>
+<hr>
+<p><strong>Версия документа:</strong> 1.0<br><strong>Дата:</strong> 24.11.2025</p>
+
+      </body>
+      </html>
+    

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from database import db_handler
 from services.cron_manager import cron_logger
 from services import payment_manager
+from services.config_parser import get_tariffs_parser
 
 # Московский timezone offset (UTC+3)
 MOSCOW_TZ_OFFSET = 3
@@ -150,10 +151,9 @@ async def process_subscription_payments_task():
 async def _charge_yookassa_subscription(user_id: str, subscription_id: str, tariff: str) -> bool:
     """Списание средств с YooKassa подписки"""
     try:
-        # Загружаем данные тарифа
-        import json
-        with open("document/tariffs.json", "r", encoding="utf-8") as f:
-            tariffs = json.load(f)
+        # Загружаем данные тарифа из TariffsData.txt
+        parser = get_tariffs_parser()
+        tariffs = parser.get_tariffs()
         
         tariff_data = next((t for t in tariffs if t.get("id") == tariff), None)
         if not tariff_data:
