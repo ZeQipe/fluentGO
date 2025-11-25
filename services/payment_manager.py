@@ -28,6 +28,10 @@ active_payments: Dict[str, dict] = {}
 # По документации @PAYPAL.md (строки 320, 358-361): "charge_id может повторяться"
 processed_charge_ids: set = set()
 
+# Множество обработанных payment_id (idempotency для начисления минут)
+# Используется для защиты от многократного начисления при повторных вызовах
+processed_payment_ids: set = set()
+
 
 # ========================================
 # Логирование платежей
@@ -505,14 +509,15 @@ async def check_payment_status(payment_id: str) -> dict:
                     return {"status": "await", "payment_info": payment_info}
                 
                 elif api_status in ["SUCCESS", "ACTIVE"]:
-                    # Платеж успешен - удаляем из хранилища
-                    del active_payments[payment_id]
-                    log_payment("INFO", f"Платеж {payment_id} успешно завершен", payment_info)
+                    # Платеж успешен - НЕ удаляем из хранилища!
+                    # Удаление произойдет после успешного начисления минут
+                    log_payment("INFO", f"Платеж {payment_id} успешно завершен в API", payment_info)
                     return {"status": "success", "payment_info": payment_info}
                 
                 elif api_status in ["FAILED", "CANCELLED", "EXPIRED"]:
                     # Платеж отменен/ошибка - удаляем из хранилища
-                    del active_payments[payment_id]
+                    if payment_id in active_payments:
+                        del active_payments[payment_id]
                     log_payment("WARNING", f"Платеж {payment_id} отменен/ошибка: {api_status}", payment_info)
                     return {"status": "closed", "payment_info": payment_info}
                 
@@ -523,7 +528,8 @@ async def check_payment_status(payment_id: str) -> dict:
             
             elif response.status_code == 404:
                 # Платеж не найден
-                del active_payments[payment_id]
+                if payment_id in active_payments:
+                    del active_payments[payment_id]
                 log_payment("ERROR", f"Платеж {payment_id} не найден в API (404)")
                 return {"status": "closed"}
             

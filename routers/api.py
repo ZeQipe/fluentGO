@@ -970,75 +970,107 @@ async def webhook_payment(request: Request):
                 "user_id": user_id
             }
         
-        # Проверяем есть ли информация о платеже в нашем хранилище
-        payment_info = payment_manager.active_payments.get(payment_data.external_order_id)
+        # Проверка idempotency по payment_id - если уже обработан, возвращаем success
+        if payment_data.external_order_id in payment_manager.processed_payment_ids:
+            payment_manager.log_payment("INFO", f"Webhook для платежа {payment_data.external_order_id} уже был обработан ранее")
+            return {
+                "received": True,
+                "message": "Webhook already processed",
+                "payment_id": payment_data.external_order_id
+            }
         
-        if payment_info:
-            # Есть в хранилище - определяем тип минут
-            is_permanent = payment_info.get("is_permanent", False)
+        # Начисление минут с обработкой ошибок
+        try:
+            # Проверяем есть ли информация о платеже в нашем хранилище
+            payment_info = payment_manager.active_payments.get(payment_data.external_order_id)
             
-            if is_permanent:
-                # Несгораемые минуты (для разовых покупок Buy)
+            if payment_info:
+                # Есть в хранилище - определяем тип минут
+                is_permanent = payment_info.get("is_permanent", False)
+                
+                if is_permanent:
+                    # Несгораемые минуты (для разовых покупок Buy)
+                    new_permanent = user.get("permanent_seconds", 0) + (minutes * 60)
+                    await db_handler.update_user(
+                        user_id=user_id,
+                        permanent_seconds=new_permanent,
+                        payment_status="active"
+                    )
+                    payment_manager.log_payment("INFO", f"Начислены несгораемые минуты через webhook", {
+                        "user_id": user_id,
+                        "minutes": minutes,
+                        "payment_id": payment_data.external_order_id
+                    })
+                else:
+                    # Сгораемые минуты (для подписок Start)
+                    # ВАЖНО: Заменяем старые минуты, а не добавляем (обновление тарифа)
+                    new_remaining = minutes * 60
+                    await db_handler.update_user(
+                        user_id=user_id,
+                        remaining_seconds=new_remaining,
+                        tariff=tariff_id,
+                        payment_status="active"
+                    )
+                    payment_manager.log_payment("INFO", f"Установлены сгораемые минуты через webhook (старые обнулены)", {
+                        "user_id": user_id,
+                        "new_minutes": minutes,
+                        "tariff": tariff_id,
+                        "payment_id": payment_data.external_order_id
+                    })
+                
+            else:
+                # Нет в хранилище - начисляем как несгораемые минуты (безопасный вариант)
+                payment_manager.log_payment("WARNING", f"Платеж не найден в хранилище, начисляем как несгораемые", {
+                    "payment_id": payment_data.external_order_id,
+                    "user_id": user_id
+                })
+                
                 new_permanent = user.get("permanent_seconds", 0) + (minutes * 60)
                 await db_handler.update_user(
                     user_id=user_id,
                     permanent_seconds=new_permanent,
                     payment_status="active"
                 )
-                payment_manager.log_payment("INFO", f"Начислены несгораемые минуты через webhook", {
-                    "user_id": user_id,
-                    "minutes": minutes,
-                    "payment_id": payment_data.external_order_id
-                })
-            else:
-                # Сгораемые минуты (для подписок Start)
-                # ВАЖНО: Заменяем старые минуты, а не добавляем (обновление тарифа)
-                new_remaining = minutes * 60
-                await db_handler.update_user(
-                    user_id=user_id,
-                    remaining_seconds=new_remaining,
-                    tariff=tariff_id,
-                    payment_status="active"
-                )
-                payment_manager.log_payment("INFO", f"Установлены сгораемые минуты через webhook (старые обнулены)", {
-                    "user_id": user_id,
-                    "new_minutes": minutes,
-                    "tariff": tariff_id,
+            
+            # Успешное начисление - удаляем из active_payments и добавляем в processed
+            if payment_data.external_order_id in payment_manager.active_payments:
+                del payment_manager.active_payments[payment_data.external_order_id]
+            payment_manager.processed_payment_ids.add(payment_data.external_order_id)
+            
+            # Добавляем charge_id в обработанные (защита от повторов для подписок)
+            if payment_data.charge_id:
+                payment_manager.processed_charge_ids.add(payment_data.charge_id)
+                payment_manager.log_payment("INFO", f"charge_id {payment_data.charge_id} добавлен в обработанные", {
+                    "charge_id": payment_data.charge_id,
                     "payment_id": payment_data.external_order_id
                 })
             
-            # Удаляем из хранилища после успешной обработки
-            del payment_manager.active_payments[payment_data.external_order_id]
-            
-        else:
-            # Нет в хранилище - начисляем как несгораемые минуты (безопасный вариант)
-            payment_manager.log_payment("WARNING", f"Платеж не найден в хранилище, начисляем как несгораемые", {
-                "payment_id": payment_data.external_order_id,
-                "user_id": user_id
-            })
-            
-            new_permanent = user.get("permanent_seconds", 0) + (minutes * 60)
-            await db_handler.update_user(
-                user_id=user_id,
-                permanent_seconds=new_permanent,
-                payment_status="active"
-            )
-        
-        # Добавляем charge_id в обработанные (защита от повторов)
-        if payment_data.charge_id:
-            payment_manager.processed_charge_ids.add(payment_data.charge_id)
-            payment_manager.log_payment("INFO", f"charge_id {payment_data.charge_id} добавлен в обработанные", {
-                "charge_id": payment_data.charge_id,
+            return {
+                "received": True,
+                "message": "Payment processed successfully",
+                "user_id": user_id,
+                "minutes_added": minutes,
                 "payment_id": payment_data.external_order_id
+            }
+            
+        except Exception as db_error:
+            # Ошибка начисления минут - удаляем payment_id и возвращаем ошибку
+            payment_manager.log_payment("ERROR", f"Ошибка начисления минут через webhook: {str(db_error)}", {
+                "payment_id": payment_data.external_order_id,
+                "user_id": user_id,
+                "exception": str(db_error)
             })
-        
-        return {
-            "received": True,
-            "message": "Payment processed successfully",
-            "user_id": user_id,
-            "minutes_added": minutes,
-            "payment_id": payment_data.external_order_id
-        }
+            
+            # Удаляем из хранилища чтобы не пытаться повторно
+            if payment_data.external_order_id in payment_manager.active_payments:
+                del payment_manager.active_payments[payment_data.external_order_id]
+            
+            return {
+                "received": True,
+                "error": "Failed to credit minutes",
+                "message": str(db_error),
+                "payment_id": payment_data.external_order_id
+            }
         
     except HTTPException:
         raise
@@ -1428,11 +1460,16 @@ async def check_subscription_payment_status(request: Request, paymentId: str):
         - paymentId: ID платежа полученный при создании
     
     Возвращает:
-        - status: "await" | "success" | "closed"
+        - status: "await" | "success" | "error" | "closed"
     """
     try:
         if not paymentId:
             raise HTTPException(status_code=400, detail="Параметр paymentId обязателен")
+        
+        # Проверка idempotency - если уже обработан, возвращаем success
+        if paymentId in payment_manager.processed_payment_ids:
+            payment_manager.log_payment("INFO", f"Платеж {paymentId} уже был обработан ранее")
+            return {"status": "success"}
         
         # Проверяем статус платежа через Airalo API
         result = await payment_manager.check_payment_status(paymentId)
@@ -1450,40 +1487,58 @@ async def check_subscription_payment_status(request: Request, paymentId: str):
                 
                 # Получаем текущие данные пользователя
                 user = await db_handler.get_user(user_id)
-                if user:
-                    # Определяем куда добавлять минуты
-                    if is_permanent:
-                        # Несгораемые минуты (для разовых покупок Buy)
-                        new_permanent = user.get("permanent_seconds", 0) + (minutes_to_add * 60)
-                        await db_handler.update_user(
-                            user_id=user_id,
-                            permanent_seconds=new_permanent
-                        )
-                        payment_manager.log_payment("INFO", f"Начислены несгораемые минуты пользователю {user_id}", {
-                            "minutes": minutes_to_add
-                        })
-                    else:
-                        # Сгораемые минуты (для подписок Start)
-                        # ВАЖНО: Заменяем старые минуты, а не добавляем (обновление тарифа)
-                        new_remaining = minutes_to_add * 60
-                        await db_handler.update_user(
-                            user_id=user_id,
-                            remaining_seconds=new_remaining,
-                            tariff=tariff_id,
-                            payment_status="active"
-                        )
-                        payment_manager.log_payment("INFO", f"Установлены сгораемые минуты пользователю {user_id} (старые обнулены)", {
-                            "new_minutes": minutes_to_add,
-                            "tariff": tariff_id
-                        })
-                else:
+                if not user:
                     payment_manager.log_payment("ERROR", f"Пользователь {user_id} не найден при начислении минут")
+                    # Удаляем payment_id из хранилища
+                    if paymentId in payment_manager.active_payments:
+                        del payment_manager.active_payments[paymentId]
+                    return {"status": "error", "message": "User not found"}
+                
+                # Определяем куда добавлять минуты
+                if is_permanent:
+                    # Несгораемые минуты (для разовых покупок Buy)
+                    new_permanent = user.get("permanent_seconds", 0) + (minutes_to_add * 60)
+                    await db_handler.update_user(
+                        user_id=user_id,
+                        permanent_seconds=new_permanent,
+                        payment_status="active"
+                    )
+                    payment_manager.log_payment("INFO", f"Начислены несгораемые минуты пользователю {user_id}", {
+                        "minutes": minutes_to_add,
+                        "payment_id": paymentId
+                    })
+                else:
+                    # Сгораемые минуты (для подписок Start)
+                    # ВАЖНО: Заменяем старые минуты, а не добавляем (обновление тарифа)
+                    new_remaining = minutes_to_add * 60
+                    await db_handler.update_user(
+                        user_id=user_id,
+                        remaining_seconds=new_remaining,
+                        tariff=tariff_id,
+                        payment_status="active"
+                    )
+                    payment_manager.log_payment("INFO", f"Установлены сгораемые минуты пользователю {user_id} (старые обнулены)", {
+                        "new_minutes": minutes_to_add,
+                        "tariff": tariff_id,
+                        "payment_id": paymentId
+                    })
+                
+                # Успешное начисление - удаляем из active_payments и добавляем в processed
+                if paymentId in payment_manager.active_payments:
+                    del payment_manager.active_payments[paymentId]
+                payment_manager.processed_payment_ids.add(paymentId)
+                
+                return {"status": "success"}
                     
             except Exception as e:
                 payment_manager.log_payment("ERROR", f"Ошибка начисления минут: {str(e)}", {
                     "payment_id": paymentId,
                     "exception": str(e)
                 })
+                # Удаляем payment_id из хранилища в случае ошибки
+                if paymentId in payment_manager.active_payments:
+                    del payment_manager.active_payments[paymentId]
+                return {"status": "error", "message": "Failed to credit minutes"}
         
         return {"status": status}
         
@@ -1535,6 +1590,15 @@ async def payment_success_handler(
         payment_status = result.get("status")
         payment_info = result.get("payment_info")
         
+        # Проверка idempotency - если уже обработан, возвращаем success
+        if payment_identifier in payment_manager.processed_payment_ids:
+            payment_manager.log_payment("INFO", f"Платеж {payment_identifier} уже был обработан ранее")
+            return {
+                "status": "success",
+                "message": "Payment already processed",
+                "redirect": "https://iec.study/fluent/"
+            }
+        
         # Если платеж успешен - обновляем данные пользователя
         if payment_status == "success" and payment_info:
             try:
@@ -1545,52 +1609,67 @@ async def payment_success_handler(
                 
                 # Получаем текущие данные пользователя
                 user = await db_handler.get_user(user_id)
-                if user:
-                    # Определяем куда добавлять минуты
-                    if is_permanent:
-                        # Несгораемые минуты (для разовых покупок Buy)
-                        new_permanent = user.get("permanent_seconds", 0) + (minutes_to_add * 60)
-                        await db_handler.update_user(
-                            user_id=user_id,
-                            permanent_seconds=new_permanent
-                        )
-                        payment_manager.log_payment("INFO", f"Начислены несгораемые минуты пользователю {user_id}", {
-                            "minutes": minutes_to_add
-                        })
-                    else:
-                        # Сгораемые минуты (для подписок Start)
-                        new_remaining = user.get("remaining_seconds", 0) + (minutes_to_add * 60)
-                        await db_handler.update_user(
-                            user_id=user_id,
-                            remaining_seconds=new_remaining,
-                            tariff=tariff_id,
-                            payment_status="active"
-                        )
-                        payment_manager.log_payment("INFO", f"Начислены сгораемые минуты пользователю {user_id}", {
-                            "minutes": minutes_to_add,
-                            "tariff": tariff_id
-                        })
-                    
-                    # Успешно начислены минуты
-                    return {
-                        "status": "success",
-                        "message": "Payment processed successfully",
-                        "minutes_added": payment_info.get("minutes_to_add", 0),
-                        "redirect": "https://iec.study/fluent/"
-                    }
-                else:
+                if not user:
                     payment_manager.log_payment("ERROR", f"Пользователь {user_id} не найден при начислении минут")
+                    # Удаляем payment_id из хранилища
+                    if payment_identifier in payment_manager.active_payments:
+                        del payment_manager.active_payments[payment_identifier]
                     return {
                         "status": "error",
                         "message": "User not found",
                         "redirect": "https://iec.study/fluent/"
                     }
+                
+                # Определяем куда добавлять минуты
+                if is_permanent:
+                    # Несгораемые минуты (для разовых покупок Buy)
+                    new_permanent = user.get("permanent_seconds", 0) + (minutes_to_add * 60)
+                    await db_handler.update_user(
+                        user_id=user_id,
+                        permanent_seconds=new_permanent,
+                        payment_status="active"
+                    )
+                    payment_manager.log_payment("INFO", f"Начислены несгораемые минуты пользователю {user_id}", {
+                        "minutes": minutes_to_add,
+                        "payment_id": payment_identifier
+                    })
+                else:
+                    # Сгораемые минуты (для подписок Start)
+                    # ВАЖНО: Заменяем старые минуты, а не добавляем (обновление тарифа)
+                    new_remaining = minutes_to_add * 60
+                    await db_handler.update_user(
+                        user_id=user_id,
+                        remaining_seconds=new_remaining,
+                        tariff=tariff_id,
+                        payment_status="active"
+                    )
+                    payment_manager.log_payment("INFO", f"Установлены сгораемые минуты пользователю {user_id} (старые обнулены)", {
+                        "new_minutes": minutes_to_add,
+                        "tariff": tariff_id,
+                        "payment_id": payment_identifier
+                    })
+                
+                # Успешное начисление - удаляем из active_payments и добавляем в processed
+                if payment_identifier in payment_manager.active_payments:
+                    del payment_manager.active_payments[payment_identifier]
+                payment_manager.processed_payment_ids.add(payment_identifier)
+                
+                # Успешно начислены минуты
+                return {
+                    "status": "success",
+                    "message": "Payment processed successfully",
+                    "minutes_added": minutes_to_add,
+                    "redirect": "https://iec.study/fluent/"
+                }
                     
             except Exception as e:
                 payment_manager.log_payment("ERROR", f"Ошибка начисления минут: {str(e)}", {
                     "payment_id": payment_identifier,
                     "exception": str(e)
                 })
+                # Удаляем payment_id из хранилища в случае ошибки
+                if payment_identifier in payment_manager.active_payments:
+                    del payment_manager.active_payments[payment_identifier]
                 return {
                     "status": "error",
                     "message": "Failed to process payment",
