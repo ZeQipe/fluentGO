@@ -1,11 +1,20 @@
+import os
 import numpy as np
 import io
-from silero_vad import load_silero_vad, get_speech_timestamps
 import time
 import wave
 import asyncio
 import openai
+import warnings
+import logging
 
+# Подавляем предупреждения NNPACK от PyTorch
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+warnings.filterwarnings('ignore', category=UserWarning, message='.*NNPACK.*')
+warnings.filterwarnings('ignore', category=UserWarning, module='torch')
+logging.getLogger('torch').setLevel(logging.ERROR)
+
+from silero_vad import load_silero_vad, get_speech_timestamps
 from .llm_utils import cancel_and_start_llm_generation
 from .prod_config import OPEN_AI_API_KEY
 

@@ -81,51 +81,20 @@ def create_app() -> FastAPI:
         if server_prefix and path.startswith(server_prefix):
             path = path[len(server_prefix):]
         
-        # Убираем языковой префикс для проверки файлов
-        path_for_file_check = path
-        
-        if path:
-            segments = path.lstrip("/").split("/")
-            # Получаем список языков из кэша (CRM API)
-            supported_languages = await language_cache.get_languages()
-            if segments and segments[0] in supported_languages:
-                # Убираем языковой префикс для проверки файловой системы
-                path_for_file_check = "/" + "/".join(segments[1:]) if len(segments) > 1 else "/"
-        
         # не трогаем запросы к файлам
         if "." in os.path.basename(path):
             return await call_next(request)
 
-        candidate_dir = os.path.join(OUT_DIR, path_for_file_check.lstrip("/"))
+        candidate_dir = os.path.join(OUT_DIR, path.lstrip("/"))
         if (
             os.path.isdir(candidate_dir)
             and os.path.isfile(os.path.join(candidate_dir, "index.html"))
             and not request.url.path.endswith("/")
         ):
-            # ✅ сохраняем query при редиректе
-            # ✅ используем оригинальный path (с языковым префиксом)
+            # Добавляем слэш к пути
             new_path = request.url.path + "/"
-            new_url = request.url.replace(path=new_path)  # query сохраняется автоматически
-            # Если передали ?locale=xx — устанавливаем куку на редиректе
-            resp = RedirectResponse(url=str(new_url), status_code=308)
-            try:
-                query_locale = request.query_params.get("locale")
-                if query_locale:
-                    # Если список языков уже получен выше — используем его; иначе получим
-                    try:
-                        langs = supported_languages
-                    except NameError:
-                        langs = await language_cache.get_languages()
-                    if (not langs) or (query_locale in langs):
-                        resp.set_cookie(
-                            key="iec_preferred_locale",
-                            value=str(query_locale),
-                            httponly=False,
-                            samesite="lax"
-                        )
-            except Exception:
-                pass
-            return resp
+            new_url = request.url.replace(path=new_path)
+            return RedirectResponse(url=str(new_url), status_code=308)
 
         return await call_next(request)
     
@@ -146,6 +115,14 @@ def create_app() -> FastAPI:
         
         # Инициализация VAD моделей
         print("Инициализация VAD моделей...")
+        
+        # Подавляем предупреждения NNPACK от PyTorch
+        import warnings
+        import logging
+        warnings.filterwarnings('ignore', category=UserWarning, message='.*NNPACK.*')
+        warnings.filterwarnings('ignore', category=UserWarning, module='torch')
+        logging.getLogger('torch').setLevel(logging.ERROR)
+        
         from vad_realtime.transcribation_utils import initialize_vad
         await initialize_vad()
         print("VAD модели готовы к работе!")
@@ -184,29 +161,33 @@ def create_app() -> FastAPI:
 
     @app.get(f"{server_prefix}/{{full_path:path}}")
     async def serve_any(full_path: str, request: Request):
-        # Проверяем, начинается ли путь с языкового префикса
         locale_to_set = None
-        path_without_locale = full_path
+        path_to_serve = full_path
         
+        # Получаем список поддерживаемых языков
+        supported_languages = await language_cache.get_languages()
+        
+        # Проверяем есть ли языковой префикс в path (приоритет 1)
         if full_path:
-            # Разбиваем путь на сегменты
             segments = full_path.lstrip("/").split("/")
-            # Получаем список языков из кэша (CRM API)
-            supported_languages = await language_cache.get_languages()
             if segments and segments[0] in supported_languages:
-                # Нашли языковой префикс
+                # Найден path параметр - это приоритет!
                 locale_to_set = segments[0]
-                # Убираем языковой префикс из пути
-                path_without_locale = "/".join(segments[1:])
+                path_to_serve = "/".join(segments[1:])
                 
-                # Делаем редирект на URL без языкового префикса
-                redirect_url = f"{server_prefix}/{path_without_locale}" if path_without_locale else server_prefix + "/"
+                # Формируем URL для редиректа без языкового префикса
+                redirect_url = f"{server_prefix}/{path_to_serve}" if path_to_serve else server_prefix + "/"
                 
-                # Сохраняем query параметры если есть
-                if request.url.query:
-                    redirect_url += f"?{request.url.query}"
+                # Фильтруем query параметры - убираем locale, остальные сохраняем
+                filtered_params = []
+                for key, value in request.query_params.items():
+                    if key != "locale":
+                        filtered_params.append(f"{key}={value}")
                 
-                # Создаем редирект с установкой куки
+                if filtered_params:
+                    redirect_url += "?" + "&".join(filtered_params)
+                
+                # Редирект с установкой куки
                 from fastapi.responses import RedirectResponse
                 resp = RedirectResponse(url=redirect_url, status_code=302)
                 resp.set_cookie(
@@ -217,34 +198,23 @@ def create_app() -> FastAPI:
                 )
                 return resp
         
-        # Обработка параметра ?locale=xx (без языкового префикса в path)
-        try:
+        # Path параметра нет - проверяем query параметр ?locale=xx (приоритет 2)
+        if not locale_to_set:
             query_locale = request.query_params.get("locale")
-            if query_locale:
-                # Гарантируем список языков
-                try:
-                    langs = supported_languages
-                except NameError:
-                    langs = await language_cache.get_languages()
-                if (not langs) or (query_locale in langs):
-                    locale_to_set = str(query_locale)
-        except Exception:
-            pass
+            if query_locale and query_locale in supported_languages:
+                locale_to_set = query_locale
         
-        # Обычная отдача файлов (без языкового префикса)
-        base = os.path.join(OUT_DIR, path_without_locale.lstrip("/"))
+        # Отдаем файл с установкой куки если нужно
+        base = os.path.join(OUT_DIR, path_to_serve.lstrip("/"))
         resp = try_serve(base)
         if resp:
             if locale_to_set:
-                try:
-                    resp.set_cookie(
-                        key="iec_preferred_locale",
-                        value=locale_to_set,
-                        httponly=False,
-                        samesite="lax"
-                    )
-                except Exception:
-                    pass
+                resp.set_cookie(
+                    key="iec_preferred_locale",
+                    value=locale_to_set,
+                    httponly=False,
+                    samesite="lax"
+                )
             return resp
 
         # 404.html если есть
@@ -252,44 +222,36 @@ def create_app() -> FastAPI:
         if os.path.isfile(not_found):
             resp = FileResponse(not_found, status_code=404)
             if locale_to_set:
-                try:
-                    resp.set_cookie(
-                        key="iec_preferred_locale",
-                        value=locale_to_set,
-                        httponly=False,
-                        samesite="lax"
-                    )
-                except Exception:
-                    pass
-            return resp
-
-        # или index.html как общий fallback
-        index = os.path.join(OUT_DIR, "index.html")
-        if os.path.isfile(index):
-            resp = FileResponse(index, status_code=200)
-            if locale_to_set:
-                try:
-                    resp.set_cookie(
-                        key="iec_preferred_locale",
-                        value=locale_to_set,
-                        httponly=False,
-                        samesite="lax"
-                    )
-                except Exception:
-                    pass
-            return resp
-
-        resp = Response("Build is missing. Run next build.", status_code=500)
-        if locale_to_set:
-            try:
                 resp.set_cookie(
                     key="iec_preferred_locale",
                     value=locale_to_set,
                     httponly=False,
                     samesite="lax"
                 )
-            except Exception:
-                pass
+            return resp
+
+        # index.html как fallback
+        index = os.path.join(OUT_DIR, "index.html")
+        if os.path.isfile(index):
+            resp = FileResponse(index, status_code=200)
+            if locale_to_set:
+                resp.set_cookie(
+                    key="iec_preferred_locale",
+                    value=locale_to_set,
+                    httponly=False,
+                    samesite="lax"
+                )
+            return resp
+
+        # Если ничего не нашли
+        resp = Response("Build is missing. Run next build.", status_code=500)
+        if locale_to_set:
+            resp.set_cookie(
+                key="iec_preferred_locale",
+                value=locale_to_set,
+                httponly=False,
+                samesite="lax"
+            )
         return resp
     
     return app
