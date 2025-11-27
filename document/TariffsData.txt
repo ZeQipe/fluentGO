@@ -5,9 +5,6 @@ price <> $0
 period <> /mo
 type <> free
 statuses <> 
-tariff <> free
-buttonText <> Current
-buttonType <> standard
 disabled <> false
 popular <> false
 popularLabel <> 
@@ -24,9 +21,6 @@ price <> $15
 period <> /100 min
 type <> one-time
 statuses <> 
-tariff <> pay-as-you-go
-buttonText <> Buy
-buttonType <> secondary
 disabled <> false
 popular <> true
 popularLabel <> Popular
@@ -44,9 +38,6 @@ price <> $9
 period <> /mo
 type <> subscription
 statuses <> 
-tariff <> standart
-buttonText <> Start
-buttonType <> secondary
 disabled <> false
 popular <> false
 popularLabel <> 
@@ -64,9 +55,6 @@ price <> $29
 period <> /mo
 type <> subscription
 statuses <> 
-tariff <> pro
-buttonText <> Start
-buttonType <> secondary
 disabled <> false
 popular <> false
 popularLabel <> 
@@ -84,9 +72,6 @@ price <> $14.5
 period <> /mo
 type <> subscription
 statuses <> vip
-tariff <> pro-plus
-buttonText <> Start
-buttonType <> secondary
 disabled <> false
 popular <> false
 popularLabel <> 
@@ -97,15 +82,12 @@ Export dialogues
 Advanced analytics
 
 -> Tariff
-id <> Only cmo-subscription
+id <> cmo-subscription
 name <> CMO Subscription
 price <> $10
 period <> /mo
 type <> subscription
 statuses <> CMO
-tariff <> cmo
-buttonText <> Start
-buttonType <> secondary
 disabled <> false
 popular <> false
 popularLabel <> 

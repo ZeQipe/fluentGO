@@ -278,23 +278,23 @@ class TariffsParser:
         tariff["features"] = features if features else []
         
         # Валидация: обязательные поля
-        required_fields = ["id", "name", "price", "period", "tariff", "type"]
+        required_fields = ["id", "name", "price", "period", "type"]
         if not all(field in tariff for field in required_fields):
             return None
         
         # Добавляем дефолтные значения для опциональных полей если их нет
         if "statuses" not in tariff:
             tariff["statuses"] = []
-        if "buttonText" not in tariff:
-            tariff["buttonText"] = "Start"
-        if "buttonType" not in tariff:
-            tariff["buttonType"] = "secondary"
         if "disabled" not in tariff:
             tariff["disabled"] = False
         if "popular" not in tariff:
             tariff["popular"] = False
         if "popularLabel" not in tariff:
             tariff["popularLabel"] = ""
+        
+        # buttonText и buttonType вычисляются на бэке, не читаем из файла
+        tariff["buttonText"] = ""
+        tariff["buttonType"] = ""
         
         # Удаляем пустые строки из необязательных полей
         if tariff.get("popularLabel") == "":

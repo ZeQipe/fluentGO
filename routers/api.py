@@ -186,7 +186,7 @@ async def get_demo_user():
             demo_user_response["remaining_time"] = await db_handler.get_remaining_minutes("demo_user")
             
             # Определяем show_topics
-            tariff = demo_user.get("tariff", "free")
+            tariff = demo_user.get("tariff", "free-guest")
             permanent_seconds = demo_user.get("permanent_seconds", 0)
             demo_user_response["show_topics"] = tariff != "standart" or permanent_seconds > 0
             
@@ -237,7 +237,7 @@ async def check_auth(request: Request):
                 # Устанавливаем тариф и статус платежа
                 await db_handler.update_user(
                     user_id=user_id,
-                    tariff="free",
+                    tariff="free-guest",
                     payment_status="unpaid"
                 )
                 
@@ -245,7 +245,7 @@ async def check_auth(request: Request):
                 user = await db_handler.get_user(user_id)
             
             # Определяем show_topics
-            tariff = user.get("tariff", "free")
+            tariff = user.get("tariff", "free-guest")
             permanent_seconds = user.get("permanent_seconds", 0)
             show_topics = tariff != "standart" or permanent_seconds > 0
             
@@ -276,7 +276,7 @@ async def check_auth(request: Request):
             }
         
         # Определяем show_topics
-        tariff = user.get("tariff", "free")
+        tariff = user.get("tariff", "free-guest")
         permanent_seconds = user.get("permanent_seconds", 0)
         show_topics = tariff != "standart" or permanent_seconds > 0
         
@@ -312,7 +312,7 @@ async def get_tariffs(request: Request):
         
         # Получаем JWT токен из куков
         token = request.cookies.get("auth_token_jwt")
-        current_user_tariff = "free"  # По умолчанию для неавторизованных
+        current_user_tariff = "free-guest"  # По умолчанию для неавторизованных
         current_user_status = "user"  # По умолчанию статус обычного пользователя
         is_authenticated = False  # Флаг авторизации
         
@@ -321,7 +321,7 @@ async def get_tariffs(request: Request):
                 user_data = await JWTService.verify_user_from_token(token)
                 if user_data:
                     is_authenticated = True
-                    current_user_tariff = user_data.get("tariff", "free")
+                    current_user_tariff = user_data.get("tariff", "free-guest")
                     # Получаем статус пользователя из БД
                     user_db_data = await db_handler.get_user(user_data.get("id"))
                     if user_db_data:
@@ -378,24 +378,26 @@ async def get_tariffs(request: Request):
                     pass  # Если не удалось сконвертировать, оставляем исходную цену
             
             # Определяем кнопку для тарифа
+            tariff_id = tariff["id"]
+            
             # Если пользователь не авторизован - для free тарифа ставим "Start"
             if not is_authenticated:
-                if tariff["tariff"] == "free":
+                if tariff_id == "free-guest":
                     tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
-                elif tariff["tariff"] == "pay-as-you-go":
+                elif tariff_id == "pay-as-you-go":
                     tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
                 else:  # Подписки
                     tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
             # Если пользователь авторизован - для его текущего тарифа ставим "Current"
-            elif tariff["tariff"] == current_user_tariff:
+            elif tariff_id == current_user_tariff:
                 tariff_copy["buttonText"] = "Current"
                 tariff_copy["buttonType"] = "standard"
             # Логика для остальных тарифов (авторизованный пользователь)
-            elif current_user_tariff == "free":
-                if tariff["tariff"] == "pay-as-you-go":
+            elif current_user_tariff == "free-guest":
+                if tariff_id == "pay-as-you-go":
                     tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
                 else:  # Подписки
@@ -404,10 +406,10 @@ async def get_tariffs(request: Request):
             
             # Логика для Pay-as-you-go (работает как Free, но показывает все тарифы)
             elif current_user_tariff == "pay-as-you-go":
-                if tariff["tariff"] == "free":
+                if tariff_id == "free-guest":
                     tariff_copy["buttonText"] = "Free"
                     tariff_copy["buttonType"] = "secondary"
-                elif tariff["tariff"] == "pay-as-you-go":
+                elif tariff_id == "pay-as-you-go":
                     tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
                 else:  # Подписки
@@ -417,13 +419,13 @@ async def get_tariffs(request: Request):
             # Логика для подписок (standart, pro)
             else:
                 # Не показываем Free тариф для подписчиков
-                if tariff["tariff"] == "free":
+                if tariff_id == "free-guest":
                     continue
                 
-                if tariff["tariff"] == "pay-as-you-go":
+                if tariff_id == "pay-as-you-go":
                     tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
-                elif tariff["tariff"] == current_user_tariff:
+                elif tariff_id == current_user_tariff:
                     # Текущая подписка
                     tariff_copy["buttonText"] = "Cancel subscription"
                     tariff_copy["buttonType"] = "standard"
@@ -433,7 +435,7 @@ async def get_tariffs(request: Request):
                     tariff_copy["buttonType"] = "secondary"
             
             # Добавляем популярный лейбл (только если тариф помечен популярным в JSON)
-            if popular_tariff and tariff["tariff"] == popular_tariff:
+            if popular_tariff and tariff_id == popular_tariff:
                 tariff_copy["popularLabel"] = "Popular"
             
             # Добавляем hasModal и paymentButtons на основе локали и типа тарифа
@@ -675,7 +677,7 @@ async def login(response: Response, login: str, password: str):
         user_response["remaining_time"] = await db_handler.get_remaining_minutes(user["id"])
         
         # Определяем show_topics
-        tariff = user.get("tariff", "free")
+        tariff = user.get("tariff", "free-guest")
         permanent_seconds = user.get("permanent_seconds", 0)
         user_response["show_topics"] = tariff != "standart" or permanent_seconds > 0
         
@@ -1317,12 +1319,12 @@ async def refuse_subscription(request: Request):
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         
-        current_tariff = user.get("tariff", "free")
+        current_tariff = user.get("tariff", "free-guest")
         
         # Отменяем подписку и устанавливаем free тариф
         success = await db_handler.update_user(
             user_id=user_id,
-            tariff="free",
+            tariff="free-guest",
             payment_status="cancelled"
         )
         
@@ -1333,7 +1335,7 @@ async def refuse_subscription(request: Request):
             "status": "success",
             "message": "Подписка успешно отменена",
             "previous_tariff": current_tariff,
-            "current_tariff": "free"
+            "current_tariff": "free-guest"
         }
         
     except HTTPException:
@@ -1406,7 +1408,7 @@ async def purchase_subscription(request: Request, data: PurchaseSubscriptionRequ
         # 4. Находим тариф по ID
         tariff = None
         for t in tariffs_data:
-            if t.get("id") == data.tariff_id or t.get("tariff") == data.tariff_id:
+            if t.get("id") == data.tariff_id:
                 tariff = t
                 break
         
