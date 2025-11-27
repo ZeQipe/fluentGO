@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import io
 import time
@@ -10,11 +11,18 @@ import logging
 
 # Подавляем предупреждения NNPACK от PyTorch
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-warnings.filterwarnings('ignore', category=UserWarning, message='.*NNPACK.*')
-warnings.filterwarnings('ignore', category=UserWarning, module='torch')
+os.environ['NNPACK_DISABLE'] = '1'
+warnings.filterwarnings('ignore')
 logging.getLogger('torch').setLevel(logging.ERROR)
 
+# Временно перенаправляем stderr при импорте silero_vad (который использует torch)
+_stderr_backup = sys.stderr
+sys.stderr = io.StringIO()
+
 from silero_vad import load_silero_vad, get_speech_timestamps
+
+# Восстанавливаем stderr
+sys.stderr = _stderr_backup
 from .llm_utils import cancel_and_start_llm_generation
 from .prod_config import OPEN_AI_API_KEY
 

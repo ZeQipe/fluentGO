@@ -59,6 +59,7 @@ async def websocket_endpoint(websocket: WebSocket):
     # Получаем session_id из query параметров
     session_id = websocket.query_params.get('session_id')
     if not session_id:
+        logger.warning(f'[VAD WS] Отклонено подключение | причина=нет session_id')
         await websocket.close(code=1008, reason="session_id required")
         return
     
@@ -104,8 +105,6 @@ async def websocket_endpoint(websocket: WebSocket):
     if response_length not in valid_response_lengths:
         response_length = 'normal'  # Fallback на normal
     
-    print(f"VAD WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}, response_length: {response_length}")
-    
     if topic != 'none':
         await vad_connection_manager.set_property(session_id,'topic', topic)
     await vad_connection_manager.set_property(session_id, 'voice', voice)
@@ -121,11 +120,12 @@ async def websocket_endpoint(websocket: WebSocket):
         remaining_seconds = await db_handler.get_remaining_seconds(user_id)
         if remaining_seconds <= 0:
             await vad_connection_manager.send_text(session_id, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+            logger.warning(f'[VAD WS] Отклонено подключение | user_id={user_id} | причина=нет минут')
             await websocket.close(code=1008, reason="Access denied - no remaining time")
             await vad_connection_manager.disconnect(session_id)
             return
 
-    logger.info(f'New connection! Total users: {len(vad_connection_manager.connections)}')
+    logger.info(f'[VAD WS] ✓ Подключен | user_id={user_id} | authenticated={is_authenticated} | session={session_id} | активных={len(vad_connection_manager.connections)}')
     await vad_connection_manager.send_text(session_id, 'Успешно подключено')
 
     await vad_apply_settings(vad_connection_manager, session_id)
@@ -166,7 +166,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await asyncio.sleep(0.05)
 
             except asyncio.TimeoutError:
-                logger.warning(f"Client {session_id}: No audio data received for {RECEIVE_TIMEOUT} seconds")
+                logger.warning(f"[VAD WS] Таймаут | session={session_id} | нет данных {RECEIVE_TIMEOUT} сек")
                 break
 
     async def handle_ping_pong():
@@ -229,11 +229,12 @@ async def websocket_endpoint(websocket: WebSocket):
     play_task = asyncio.create_task(play_audio())
     ping_pong_task = asyncio.create_task(handle_ping_pong())
 
+    disconnect_reason = "нормальное завершение"
     try:
         await asyncio.gather(receive_task, synthesize_task, play_task, ping_pong_task)
     except Exception as e:
-        print(f"WebSocket error: {str(e)}")
-        # Не отправляем ошибку в закрытое соединение
+        disconnect_reason = f"ошибка: {str(e)}"
+        logger.error(f"[VAD WS] WebSocket ошибка | user_id={user_id} | session={session_id} | error={str(e)}")
     finally:
         # Останавливаем LLM агента перед отменой задач
         try:
@@ -246,8 +247,8 @@ async def websocket_endpoint(websocket: WebSocket):
         synthesize_task.cancel()
         play_task.cancel()
         ping_pong_task.cancel()
-        logger.info(f'Disconnected! Total users: {len(vad_connection_manager.connections)}')
         await vad_connection_manager.disconnect(session_id)
+        logger.info(f'[VAD WS] ✗ Отключен | user_id={user_id} | session={session_id} | причина={disconnect_reason} | активных={len(vad_connection_manager.connections)}')
 
 @router.websocket("/ws-button")
 async def websocket_button_endpoint(websocket: WebSocket):
@@ -257,6 +258,7 @@ async def websocket_button_endpoint(websocket: WebSocket):
     # Получаем session_id из query параметров
     session_id = websocket.query_params.get('session_id')
     if not session_id:
+        logger.warning(f'[BUTTON WS] Отклонено подключение | причина=нет session_id')
         await websocket.close(code=1008, reason="session_id required")
         return
 
@@ -302,8 +304,6 @@ async def websocket_button_endpoint(websocket: WebSocket):
     if response_length not in valid_response_lengths:
         response_length = 'normal'  # Fallback на normal
     
-    print(f"Button WebSocket connection - authenticated: {is_authenticated}, user: {user_id}, voice: {voice}, topic: {topic}, response_length: {response_length}")
-    
     if topic != 'none':
         await button_connection_manager.set_property(session_id, 'topic', topic)
     await button_connection_manager.set_property(session_id, 'voice', voice)
@@ -319,11 +319,12 @@ async def websocket_button_endpoint(websocket: WebSocket):
         remaining_seconds = await db_handler.get_remaining_seconds(user_id)
         if remaining_seconds <= 0:
             await button_connection_manager.send_text(session_id, "Доступ запрещен. У вас закончились минуты. Пожалуйста, пополните баланс.")
+            logger.warning(f'[BUTTON WS] Отклонено подключение | user_id={user_id} | причина=нет минут')
             await websocket.close(code=1008, reason="Access denied - no remaining time")
             await button_connection_manager.disconnect(session_id)
             return
     
-    logger.info(f'New connection! Total users: {len(button_connection_manager.connections)}')
+    logger.info(f'[BUTTON WS] ✓ Подключен | user_id={user_id} | authenticated={is_authenticated} | session={session_id} | активных={len(button_connection_manager.connections)}')
     await button_connection_manager.send_text(session_id, f'CONNECTED:{session_id}')
     await button_connection_manager.send_text(session_id, 'Успешно подключено')
 
@@ -385,11 +386,12 @@ async def websocket_button_endpoint(websocket: WebSocket):
     play_task = asyncio.create_task(play_audio())
     ping_pong_task = asyncio.create_task(handle_ping_pong())
 
+    disconnect_reason = "нормальное завершение"
     try:
         await asyncio.gather(synthesize_task, play_task, ping_pong_task)
     except Exception as e:
-        print(f"Button WebSocket error: {str(e)}")
-        # Не отправляем ошибку в закрытое соединение
+        disconnect_reason = f"ошибка: {str(e)}"
+        logger.error(f"[BUTTON WS] WebSocket ошибка | user_id={user_id} | session={session_id} | error={str(e)}")
     finally:
         # Останавливаем LLM агента перед отменой задач
         try:
@@ -402,5 +404,5 @@ async def websocket_button_endpoint(websocket: WebSocket):
         synthesize_task.cancel()
         play_task.cancel()
         ping_pong_task.cancel()
-        logger.info(f'Disconnected! Total users: {len(button_connection_manager.connections)}')
         await button_connection_manager.disconnect(session_id)
+        logger.info(f'[BUTTON WS] ✗ Отключен | user_id={user_id} | session={session_id} | причина={disconnect_reason} | активных={len(button_connection_manager.connections)}')

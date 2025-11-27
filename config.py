@@ -7,13 +7,13 @@ MODAL_LANGUAGES = ["ru"]
 
 # Платежные системы для разовых покупок (type = "one-time")
 ONE_TIME_PAYMENT_SYSTEMS = [
-    {"label": "💳Яндекс Пэй", "key": "yandex_pay"},
+    {"label": "💳 ЮКасса", "key": "yookassa"},
     {"label": "💲PayPal", "key": "paypal"}
 ]
 
 # Платежные системы для подписок (type = "subscription")
 SUBSCRIPTION_PAYMENT_SYSTEMS = [
-    {"label": "💳ЮКасса", "key": "yookassa"},
+    {"label": "💳 ЮКасса", "key": "yookassa"},
     {"label": "💲PayPal", "key": "paypal"}
 ]
 

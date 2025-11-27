@@ -59,33 +59,29 @@ class ConnectionManager:
             }
 
     async def set_llm_task(self, client_ip: str, task):
-        async with self.lock:
-            if client_ip in self.connections:
-                self.connections[client_ip]['llm_task'] = task
+        if client_ip in self.connections:
+            self.connections[client_ip]['llm_task'] = task
 
     async def add_user_message(self, client_ip, message):
-        async with self.lock:
-            if client_ip in self.connections:
-                self.connections[client_ip]['chat_history'].append({'role':'user','content':message})
-                logger.info(f'User: {message}')
+        if client_ip in self.connections:
+            self.connections[client_ip]['chat_history'].append({'role':'user','content':message})
+            logger.info(f'User: {message}')
 
     async def add_assistant_message(self, client_ip, message):
-        async with self.lock:
-            if client_ip in self.connections:
-                self.connections[client_ip]['chat_history'].append({'role':'assistant','content':message})
-                logger.info(f'Assistant: {message}')
+        if client_ip in self.connections:
+            self.connections[client_ip]['chat_history'].append({'role':'assistant','content':message})
+            logger.info(f'Assistant: {message}')
 
     async def cancel_llm_task(self, client_ip: str):
-        async with self.lock:
-            if client_ip in self.connections:
-                current_task = self.connections[client_ip].get('llm_task')
-                if current_task and not current_task.done():
-                    current_task.cancel()
-                    try:
-                        await current_task
-                    except asyncio.CancelledError:
-                        pass
-                self.connections[client_ip]['llm_task'] = None
+        if client_ip in self.connections:
+            current_task = self.connections[client_ip].get('llm_task')
+            if current_task and not current_task.done():
+                current_task.cancel()
+                try:
+                    await current_task
+                except asyncio.CancelledError:
+                    pass
+            self.connections[client_ip]['llm_task'] = None
     async def clear_queues(self, client_ip: str):
         if client_ip in self.connections:
             self.connections[client_ip]['queue'] = asyncio.Queue()
@@ -104,63 +100,57 @@ class ConnectionManager:
 
     async def send_text(self, client_ip: str, message: str):
         try:
+            if client_ip in self.connections:
+                # Для корректной отправки русского текста
+                import json
+                if isinstance(message, dict):
+                    message = json.dumps(message, ensure_ascii=False)
+                await self.connections[client_ip]['socket'].send_text(message)
+        except Exception as e:
+            # Удаляем разорванное соединение с блокировкой
             async with self.lock:
                 if client_ip in self.connections:
-                    # Для корректной отправки русского текста
-                    import json
-                    if isinstance(message, dict):
-                        message = json.dumps(message, ensure_ascii=False)
-                    await self.connections[client_ip]['socket'].send_text(message)
-        except Exception as e:
-            # Удаляем разорванное соединение
-            if client_ip in self.connections:
-                del self.connections[client_ip]
+                    del self.connections[client_ip]
 
     async def send_bytes(self, client_ip: str, data: bytes):
         try:
+            if client_ip in self.connections:
+                await self.connections[client_ip]['socket'].send_bytes(data)
+        except Exception as e:
+            # Удаляем разорванное соединение с блокировкой
             async with self.lock:
                 if client_ip in self.connections:
-                    await self.connections[client_ip]['socket'].send_bytes(data)
-        except Exception as e:
-            # Удаляем разорванное соединение
-            if client_ip in self.connections:
-                del self.connections[client_ip]
+                    del self.connections[client_ip]
 
     async def record_temporary_chunk(self, client_ip: str, chunk):
-        async with self.lock:
-            if client_ip in self.connections:
-                self.connections[client_ip]['temporary_buffer'].append(chunk)
-                if len(self.connections[client_ip]['temporary_buffer']) > 2:
-                    self.connections[client_ip]['temporary_buffer'].pop(0)
+        if client_ip in self.connections:
+            self.connections[client_ip]['temporary_buffer'].append(chunk)
+            if len(self.connections[client_ip]['temporary_buffer']) > 2:
+                self.connections[client_ip]['temporary_buffer'].pop(0)
 
     async def get_temporary_chunks(self, client_ip):
-        async with self.lock:
-            if client_ip in self.connections:
-                return self.connections[client_ip]['temporary_buffer']
-            return None
+        if client_ip in self.connections:
+            return self.connections[client_ip]['temporary_buffer']
+        return None
 
     async def get_eleven_labs_config(self, client_ip):
-        async with self.lock:
-            if client_ip in self.connections:
-                return self.connections[client_ip]['el_config']
-            return None
+        if client_ip in self.connections:
+            return self.connections[client_ip]['el_config']
+        return None
 
     async def set_property(self, client_ip, property, value):
-        async with self.lock:
-            if client_ip in self.connections:
-                self.connections[client_ip][property] = value
+        if client_ip in self.connections:
+            self.connections[client_ip][property] = value
 
     async def get_property(self, client_ip, property):
-        async with self.lock:
-            if client_ip in self.connections:
-                return self.connections[client_ip][property]
-            return None
+        if client_ip in self.connections:
+            return self.connections[client_ip][property]
+        return None
 
     async def ping(self, client_ip: str):
         """Обновляет время последнего ping для соединения"""
-        async with self.lock:
-            if client_ip in self.connections:
-                self.connections[client_ip]['last_ping'] = time.time()
+        if client_ip in self.connections:
+            self.connections[client_ip]['last_ping'] = time.time()
 
     async def pong(self, client_ip: str):
         """Отправляет pong ответ клиенту"""
@@ -168,9 +158,8 @@ class ConnectionManager:
 
     async def update_activity(self, client_ip: str):
         """Обновляет время последней активности соединения"""
-        async with self.lock:
-            if client_ip in self.connections:
-                self.connections[client_ip]['last_ping'] = time.time()
+        if client_ip in self.connections:
+            self.connections[client_ip]['last_ping'] = time.time()
 
     async def cleanup_stale_connections(self):
         """Очищает неактивные соединения"""

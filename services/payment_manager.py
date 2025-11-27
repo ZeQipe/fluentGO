@@ -120,7 +120,7 @@ async def get_exchange_rate() -> Optional[float]:
 # ========================================
 # Конвертация цены в нужную валюту
 # ========================================
-async def convert_price(price_usd: float, locale: str) -> Tuple[float, str]:
+async def convert_price(price_usd: float, locale: str) -> Tuple[int, str]:
     """
     Конвертирует цену в USD или RUB в зависимости от локали
     
@@ -129,20 +129,20 @@ async def convert_price(price_usd: float, locale: str) -> Tuple[float, str]:
         locale: Локаль пользователя
         
     Returns:
-        (сумма, валюта) - сумма в копейках/центах, валюта
+        (сумма, валюта) - целое число в рублях/долларах
     """
     if locale == "ru":
         # Конвертируем в рубли
         exchange_rate = await get_exchange_rate()
         if exchange_rate:
+            # Округляем вверх, возвращаем целое число в рублях
             price_rub = math.ceil(price_usd * exchange_rate)
-            # Переводим в копейки
-            return price_rub * 100, "RUB"
+            return price_rub, "RUB"
         else:
             log_payment("WARNING", "Не удалось получить курс, используем USD")
     
-    # Используем доллары, переводим в центы
-    return int(price_usd * 100), "USD"
+    # Округляем вверх, возвращаем целое число в долларах
+    return math.ceil(price_usd), "USD"
 
 
 # ========================================
@@ -193,9 +193,9 @@ async def create_one_time_payment(
         # Формируем тело запроса
         payload = {
             "external_order_id": external_order_id,
-            "amount": amount / 100,  # API принимает в рублях/долларах, не в копейках
+            "amount": amount,  # Целое число в рублях/долларах
             "currency": currency,
-            "payment_method": payment_method,  # "yandex_pay" или "paypal"
+            "payment_method": payment_method,  # "yookassa" или "paypal"
             "webhook_url": os.getenv("WEBHOOK_URL", "https://iec.study/fluent/api/webhook/payment"),
             "auth_token": os.getenv("WEBHOOK_AUTH_TOKEN", "Bearer_Token_12345"),
             "return_url": os.getenv("PAYMENT_RETURN_URL", "https://iec.study/fluent"),
@@ -203,7 +203,6 @@ async def create_one_time_payment(
             "custom_data": {
                 "user_id": user_data.get("id"),
                 "product_name": tariff_data.get("name"),
-                "subscription_months": 1,
                 "email": user_data.get("email", ""),
                 "minutes": minutes,
                 "tariff_id": tariff_data.get("id")
@@ -211,6 +210,7 @@ async def create_one_time_payment(
         }
         
         # Отправляем запрос
+        # Токен одинаковый для sandbox и production
         api_token = os.getenv("PAYMENT_API_TOKEN", "preview-external-api-secret-2024")
         headers = {
             "Content-Type": "application/json",
@@ -330,12 +330,13 @@ async def create_subscription_payment(
             
             payload = {
                 "payment_provider": "PAYPAL",
-                "amount": amount,  # В центах/копейках
+                "amount": amount,  # Целое число в рублях/долларах
                 "currency": currency,  # USD или RUB
                 "interval_count": 1,
                 "interval_unit": "MONTH",
                 "product_title": product_title,
                 "webhook_url": os.getenv("WEBHOOK_URL", "https://iec.study/fluent/api/webhook/payment"),
+                "return_url": os.getenv("PAYMENT_RETURN_URL", "https://iec.study/fluent"),
                 "custom_data": {
                     "user_id": user_data.get("id"),
                     "product_name": tariff_data.get("name"),
@@ -351,10 +352,11 @@ async def create_subscription_payment(
             amount, currency = await convert_price(price_usd, "ru")
             
             payload = {
-                "amount": amount,  # В копейках (всегда RUB)
+                "amount": amount,  # Целое число в рублях (всегда RUB для YooKassa)
                 "currency": "RUB",
                 "product_title": product_title,
                 "webhook_url": os.getenv("WEBHOOK_URL", "https://iec.study/fluent/api/webhook/payment"),
+                "return_url": os.getenv("PAYMENT_RETURN_URL", "https://iec.study/fluent"),
                 "custom_data": {
                     "user_id": user_data.get("id"),
                     "product_name": tariff_data.get("name"),
@@ -367,6 +369,7 @@ async def create_subscription_payment(
             }
         
         # Отправляем запрос
+        # Токен одинаковый для sandbox и production
         api_token = os.getenv("PAYMENT_API_TOKEN")
         if not api_token:
             raise Exception("PAYMENT_API_TOKEN не установлен в переменных окружения")

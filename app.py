@@ -115,14 +115,6 @@ def create_app() -> FastAPI:
         
         # Инициализация VAD моделей
         print("Инициализация VAD моделей...")
-        
-        # Подавляем предупреждения NNPACK от PyTorch
-        import warnings
-        import logging
-        warnings.filterwarnings('ignore', category=UserWarning, message='.*NNPACK.*')
-        warnings.filterwarnings('ignore', category=UserWarning, module='torch')
-        logging.getLogger('torch').setLevel(logging.ERROR)
-        
         from vad_realtime.transcribation_utils import initialize_vad
         await initialize_vad()
         print("VAD модели готовы к работе!")

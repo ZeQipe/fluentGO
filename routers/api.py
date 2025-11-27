@@ -68,15 +68,22 @@ class CreatePaymentRequest(BaseModel):
     external_order_id: Optional[str] = None
 
 class WebhookPaymentData(BaseModel):
-    internal_order_id: str
-    external_order_id: str
+    # Поля для разовых платежей
+    internal_order_id: Optional[str] = None
+    external_order_id: Optional[str] = None
+    payment_method: Optional[str] = None
+    
+    # Поля для подписок
+    subscription_id: Optional[str] = None
+    charge_id: Optional[str] = None
+    order_id: Optional[str] = None
+    
+    # Общие поля
     status: str
     amount: float
     currency: str
-    payment_method: str
     processed_at: int
-    # Для подписок: уникальный ID транзакции (защита от повторной обработки)
-    charge_id: Optional[str] = None
+    
     # custom_data поля встраиваются в корень по документации Airalo API
     user_id: Optional[str] = None
     product_name: Optional[str] = None
@@ -925,14 +932,22 @@ async def webhook_payment(request: Request):
             })
             raise HTTPException(status_code=400, detail=f"Неверная структура данных: {str(e)}")
         
+        # Определяем ID платежа (разные для разовых и подписок)
+        payment_id = payment_data.external_order_id or payment_data.subscription_id or payment_data.order_id
+        
+        if not payment_id:
+            payment_manager.log_payment("ERROR", "Отсутствует ID платежа в webhook", {
+                "data": webhook_data
+            })
+            raise HTTPException(status_code=400, detail="Payment ID is required")
+        
         # Проверка на повторную обработку (idempotency)
-        # По документации @PAYPAL.md (строки 320, 358-361): "charge_id может повторяться"
         # Для подписок каждое списание имеет уникальный charge_id
         if payment_data.charge_id:
             if payment_data.charge_id in payment_manager.processed_charge_ids:
                 payment_manager.log_payment("INFO", f"Webhook с charge_id {payment_data.charge_id} уже был обработан, пропускаем", {
                     "charge_id": payment_data.charge_id,
-                    "payment_id": payment_data.external_order_id
+                    "payment_id": payment_id
                 })
                 return {
                     "received": True, 
@@ -940,11 +955,26 @@ async def webhook_payment(request: Request):
                     "charge_id": payment_data.charge_id
                 }
         
-        # Проверяем статус платежа (по документации: SUCCESS для успешных)
-        if payment_data.status.upper() != "SUCCESS":
-            payment_manager.log_payment("INFO", f"Webhook со статусом {payment_data.status}, пропускаем", {
-                "payment_id": payment_data.external_order_id
-            })
+        # Проверяем статус платежа
+        # SUCCESS - для разовых платежей
+        # PAYMENT.COMPLETED - для подписок
+        success_statuses = ["SUCCESS", "PAYMENT.COMPLETED"]
+        status_upper = payment_data.status.upper()
+        
+        if status_upper not in success_statuses:
+            # Если это отказ/ошибка - удаляем из active_payments
+            failed_statuses = ["FAILED", "PAYMENT.FAILED", "CANCELLED", "EXPIRED"]
+            if status_upper in failed_statuses:
+                if payment_id in payment_manager.active_payments:
+                    del payment_manager.active_payments[payment_id]
+                payment_manager.log_payment("WARNING", f"Webhook с неуспешным статусом {payment_data.status}, платеж удален из active", {
+                    "payment_id": payment_id,
+                    "status": payment_data.status
+                })
+            else:
+                payment_manager.log_payment("INFO", f"Webhook со статусом {payment_data.status}, пропускаем", {
+                    "payment_id": payment_id
+                })
             return {"received": True, "message": f"Payment status: {payment_data.status}"}
         
         # Извлекаем данные из custom_data (они встроены в корень по документации)
@@ -954,7 +984,7 @@ async def webhook_payment(request: Request):
         
         if not user_id:
             payment_manager.log_payment("ERROR", "user_id отсутствует в webhook данных", {
-                "payment_id": payment_data.external_order_id
+                "payment_id": payment_id
             })
             raise HTTPException(status_code=400, detail="user_id is required")
         
@@ -962,7 +992,7 @@ async def webhook_payment(request: Request):
         user = await db_handler.get_user(user_id)
         if not user:
             payment_manager.log_payment("ERROR", f"Пользователь {user_id} не найден", {
-                "payment_id": payment_data.external_order_id
+                "payment_id": payment_id
             })
             return {
                 "received": True,
@@ -971,18 +1001,18 @@ async def webhook_payment(request: Request):
             }
         
         # Проверка idempotency по payment_id - если уже обработан, возвращаем success
-        if payment_data.external_order_id in payment_manager.processed_payment_ids:
-            payment_manager.log_payment("INFO", f"Webhook для платежа {payment_data.external_order_id} уже был обработан ранее")
+        if payment_id in payment_manager.processed_payment_ids:
+            payment_manager.log_payment("INFO", f"Webhook для платежа {payment_id} уже был обработан ранее")
             return {
                 "received": True,
                 "message": "Webhook already processed",
-                "payment_id": payment_data.external_order_id
+                "payment_id": payment_id
             }
         
         # Начисление минут с обработкой ошибок
         try:
             # Проверяем есть ли информация о платеже в нашем хранилище
-            payment_info = payment_manager.active_payments.get(payment_data.external_order_id)
+            payment_info = payment_manager.active_payments.get(payment_id)
             
             if payment_info:
                 # Есть в хранилище - определяем тип минут
@@ -999,7 +1029,7 @@ async def webhook_payment(request: Request):
                     payment_manager.log_payment("INFO", f"Начислены несгораемые минуты через webhook", {
                         "user_id": user_id,
                         "minutes": minutes,
-                        "payment_id": payment_data.external_order_id
+                        "payment_id": payment_id
                     })
                 else:
                     # Сгораемые минуты (для подписок Start)
@@ -1015,13 +1045,13 @@ async def webhook_payment(request: Request):
                         "user_id": user_id,
                         "new_minutes": minutes,
                         "tariff": tariff_id,
-                        "payment_id": payment_data.external_order_id
+                        "payment_id": payment_id
                     })
                 
             else:
                 # Нет в хранилище - начисляем как несгораемые минуты (безопасный вариант)
                 payment_manager.log_payment("WARNING", f"Платеж не найден в хранилище, начисляем как несгораемые", {
-                    "payment_id": payment_data.external_order_id,
+                    "payment_id": payment_id,
                     "user_id": user_id
                 })
                 
@@ -1033,16 +1063,16 @@ async def webhook_payment(request: Request):
                 )
             
             # Успешное начисление - удаляем из active_payments и добавляем в processed
-            if payment_data.external_order_id in payment_manager.active_payments:
-                del payment_manager.active_payments[payment_data.external_order_id]
-            payment_manager.processed_payment_ids.add(payment_data.external_order_id)
+            if payment_id in payment_manager.active_payments:
+                del payment_manager.active_payments[payment_id]
+            payment_manager.processed_payment_ids.add(payment_id)
             
             # Добавляем charge_id в обработанные (защита от повторов для подписок)
             if payment_data.charge_id:
                 payment_manager.processed_charge_ids.add(payment_data.charge_id)
                 payment_manager.log_payment("INFO", f"charge_id {payment_data.charge_id} добавлен в обработанные", {
                     "charge_id": payment_data.charge_id,
-                    "payment_id": payment_data.external_order_id
+                    "payment_id": payment_id
                 })
             
             return {
@@ -1050,26 +1080,26 @@ async def webhook_payment(request: Request):
                 "message": "Payment processed successfully",
                 "user_id": user_id,
                 "minutes_added": minutes,
-                "payment_id": payment_data.external_order_id
+                "payment_id": payment_id
             }
             
         except Exception as db_error:
             # Ошибка начисления минут - удаляем payment_id и возвращаем ошибку
             payment_manager.log_payment("ERROR", f"Ошибка начисления минут через webhook: {str(db_error)}", {
-                "payment_id": payment_data.external_order_id,
+                "payment_id": payment_id,
                 "user_id": user_id,
                 "exception": str(db_error)
             })
             
             # Удаляем из хранилища чтобы не пытаться повторно
-            if payment_data.external_order_id in payment_manager.active_payments:
-                del payment_manager.active_payments[payment_data.external_order_id]
+            if payment_id in payment_manager.active_payments:
+                del payment_manager.active_payments[payment_id]
             
             return {
                 "received": True,
                 "error": "Failed to credit minutes",
                 "message": str(db_error),
-                "payment_id": payment_data.external_order_id
+                "payment_id": payment_id
             }
         
     except HTTPException:
@@ -1386,10 +1416,10 @@ async def purchase_subscription(request: Request, data: PurchaseSubscriptionRequ
         # 5. Получаем локаль из куки для определения валюты
         locale = request.cookies.get("iec_preferred_locale", "en")
         
-        # 6. Определяем тип платежа по тексту кнопки
-        button_text = tariff.get("buttonText", "").lower()
+        # 6. Определяем тип платежа по полю type
+        tariff_type = tariff.get("type")
         
-        if button_text == "buy":
+        if tariff_type == "one-time":
             # Разовая покупка (несгораемые минуты)
             payment_manager.log_payment("INFO", f"Создание разового платежа для пользователя {user['id']}", {
                 "tariff_id": data.tariff_id,
@@ -1404,7 +1434,7 @@ async def purchase_subscription(request: Request, data: PurchaseSubscriptionRequ
                 locale=locale
             )
             
-        elif button_text == "start":
+        elif tariff_type == "subscription":
             # Подписка (сгораемые минуты)
             payment_manager.log_payment("INFO", f"Создание подписки для пользователя {user['id']}", {
                 "tariff_id": data.tariff_id,
@@ -1420,10 +1450,10 @@ async def purchase_subscription(request: Request, data: PurchaseSubscriptionRequ
             )
             
         else:
-            # Неизвестный тип кнопки
+            # Неизвестный тип тарифа
             raise HTTPException(
                 status_code=400, 
-                detail=f"Неподдерживаемый тип тарифа (buttonText: {button_text}). Ожидается 'buy' или 'start'"
+                detail=f"Неподдерживаемый тип тарифа (type: {tariff_type}). Ожидается 'one-time' или 'subscription'"
             )
         
         # 7. Обрабатываем результат
