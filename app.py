@@ -34,6 +34,12 @@ def try_serve(path: str) -> FileResponse | None:
     """Пробуем несколько вариантов: точный файл, index.html в папке, вариант .html."""
     # точный путь
     if os.path.isfile(path):
+        # Логируем абсолютный путь к файлу
+        if path.endswith(('.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico')):
+            abs_path = os.path.abspath(path)
+            file_size = os.path.getsize(path)
+            print(f"[STATIC] Читаю файл: {abs_path} (размер: {file_size} байт)")
+        
         resp = FileResponse(path)
         # Отключаем кэширование для SVG, изображений и других статических файлов
         if path.endswith(('.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico')):
@@ -162,6 +168,7 @@ def create_app() -> FastAPI:
         # Логируем запросы к статическим файлам (SVG, изображения)
         if full_path and any(full_path.endswith(ext) for ext in ['.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico']):
             print(f"[STATIC] Запрос статического файла: {full_path}")
+            print(f"[STATIC] Полный URL: {request.url}")
         
         locale_to_set = None
         path_to_serve = full_path
@@ -217,9 +224,6 @@ def create_app() -> FastAPI:
                     httponly=False,
                     samesite="lax"
                 )
-            # Логируем успешную отдачу файла
-            if path_to_serve and any(path_to_serve.endswith(ext) for ext in ['.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico']):
-                print(f"[STATIC] ✅ Файл отправлен: {path_to_serve}")
             return resp
 
         # 404.html если есть
