@@ -346,6 +346,13 @@ async def get_tariffs(request: Request):
                 break
         # Если в тарифах не отмечен популярный — не проставляем popularLabel вовсе
         
+        # Определяем тип текущего тарифа пользователя
+        current_tariff_type = None
+        for t in tariffs_data:
+            if t.get("id") == current_user_tariff:
+                current_tariff_type = t.get("type")
+                break
+        
         # Формируем ответ на основе текущего тарифа
         result_tariffs = []
         
@@ -391,10 +398,16 @@ async def get_tariffs(request: Request):
                 else:  # Подписки
                     tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
-            # Если пользователь авторизован - для его текущего тарифа ставим "Current"
+            # Если пользователь авторизован и это его текущий тариф
             elif tariff_id == current_user_tariff:
-                tariff_copy["buttonText"] = "Current"
-                tariff_copy["buttonType"] = "standard"
+                # Если текущий тариф - подписка, показываем "Cancel subscription"
+                if current_tariff_type == "subscription":
+                    tariff_copy["buttonText"] = "Cancel subscription"
+                    tariff_copy["buttonType"] = "standard"
+                else:
+                    # Для free-guest и pay-as-you-go показываем "Current"
+                    tariff_copy["buttonText"] = "Current"
+                    tariff_copy["buttonType"] = "standard"
             # Логика для остальных тарифов (авторизованный пользователь)
             elif current_user_tariff == "free-guest":
                 if tariff_id == "pay-as-you-go":
@@ -416,7 +429,7 @@ async def get_tariffs(request: Request):
                     tariff_copy["buttonText"] = "Start"
                     tariff_copy["buttonType"] = "secondary"
             
-            # Логика для подписок (standart, pro)
+            # Логика для подписок (standart, pro и любых других с type: subscription)
             else:
                 # Не показываем Free тариф для подписчиков
                 if tariff_id == "free-guest":
@@ -425,10 +438,6 @@ async def get_tariffs(request: Request):
                 if tariff_id == "pay-as-you-go":
                     tariff_copy["buttonText"] = "Buy"
                     tariff_copy["buttonType"] = "secondary"
-                elif tariff_id == current_user_tariff:
-                    # Текущая подписка
-                    tariff_copy["buttonText"] = "Cancel subscription"
-                    tariff_copy["buttonType"] = "standard"
                 else:
                     # Другие подписки
                     tariff_copy["buttonText"] = "Start"
