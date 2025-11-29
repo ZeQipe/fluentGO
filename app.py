@@ -34,7 +34,13 @@ def try_serve(path: str) -> FileResponse | None:
     """Пробуем несколько вариантов: точный файл, index.html в папке, вариант .html."""
     # точный путь
     if os.path.isfile(path):
-        return FileResponse(path)
+        resp = FileResponse(path)
+        # Отключаем кэширование для SVG, изображений и других статических файлов
+        if path.endswith(('.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico')):
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers["Expires"] = "0"
+        return resp
 
     # .../index.html
     idx = os.path.join(path, "index.html")
@@ -153,6 +159,10 @@ def create_app() -> FastAPI:
 
     @app.get(f"{server_prefix}/{{full_path:path}}")
     async def serve_any(full_path: str, request: Request):
+        # Логируем запросы к статическим файлам (SVG, изображения)
+        if full_path and any(full_path.endswith(ext) for ext in ['.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico']):
+            print(f"[STATIC] Запрос статического файла: {full_path}")
+        
         locale_to_set = None
         path_to_serve = full_path
         
@@ -207,6 +217,9 @@ def create_app() -> FastAPI:
                     httponly=False,
                     samesite="lax"
                 )
+            # Логируем успешную отдачу файла
+            if path_to_serve and any(path_to_serve.endswith(ext) for ext in ['.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico']):
+                print(f"[STATIC] ✅ Файл отправлен: {path_to_serve}")
             return resp
 
         # 404.html если есть
