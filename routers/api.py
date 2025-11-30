@@ -493,19 +493,22 @@ async def get_tariffs(request: Request):
 async def get_most_popular_tariff():
     """Определяет самый популярный тариф по количеству пользователей"""
     try:
-        import aiosqlite
-        async with aiosqlite.connect(db_handler.db_path) as db:
-            cursor = await db.execute("""
-                SELECT tariff, COUNT(*) as count 
-                FROM users 
-                WHERE tariff IS NOT NULL 
-                GROUP BY tariff 
-                ORDER BY count DESC 
-                LIMIT 1
-            """)
-            result = await cursor.fetchone()
-            return result[0] if result else "pro"  # По умолчанию pro
-    except:
+        from sqlalchemy import select, func
+        from database import User
+        
+        async with db_handler.async_session() as session:
+            # Запрос на самый популярный тариф
+            result = await session.execute(
+                select(User.tariff, func.count(User.tariff).label('count'))
+                .where(User.tariff.isnot(None))
+                .group_by(User.tariff)
+                .order_by(func.count(User.tariff).desc())
+                .limit(1)
+            )
+            row = result.first()
+            return row[0] if row else "pro"  # По умолчанию pro
+    except Exception as e:
+        logger.error(f"Ошибка определения популярного тарифа: {e}")
         return "pro"  # Fallback
 
 @router.get("/language")

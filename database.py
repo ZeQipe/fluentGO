@@ -1,11 +1,17 @@
-import sqlite3
-import asyncio
-import aiosqlite
-from pathlib import Path
+import os
 import logging
 import math
+from typing import Optional
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import String, Integer, Text, ForeignKey, select, update as sql_update, delete as sql_delete
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# УТИЛИТЫ ДЛЯ КОНВЕРТАЦИИ
+# ============================================================================
 
 def minutes_to_seconds(minutes: int) -> int:
     """Конвертация минут в секунды"""
@@ -15,246 +21,221 @@ def seconds_to_minutes_ceil(seconds: int) -> int:
     """Конвертация секунд в минуты с округлением вверх"""
     return math.ceil(seconds / 60)
 
+# ============================================================================
+# SQLALCHEMY МОДЕЛИ
+# ============================================================================
+
+class Base(DeclarativeBase):
+    pass
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_name: Mapped[str] = mapped_column(String, nullable=False)
+    remaining_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    permanent_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    iat: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    exp: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    tariff: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    payment_date: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    payment_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="user")
+    subscription_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    payment_system: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    subscription_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+class Topic(Base):
+    __tablename__ = "topic"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+
+# ============================================================================
+# DATABASE HANDLER
+# ============================================================================
+
 class DatabaseHandler:
-    def __init__(self, db_path: str = "users.db"):
-        self.db_path = db_path
+    def __init__(self, database_url: str = None):
+        """
+        Инициализация обработчика БД
+        
+        Args:
+            database_url: URL подключения к БД (например: postgresql+asyncpg://user:pass@localhost/dbname)
+                         Если не указан - берется из переменной окружения DATABASE_URL
+        """
+        self.database_url = database_url or os.getenv(
+            "DATABASE_URL",
+            "postgresql+asyncpg://fluentgo_user:change_me_in_production@postgres:5432/fluentgo"
+        )
+        
+        # Создаем async engine
+        self.engine = create_async_engine(
+            self.database_url,
+            echo=False,  # Установить True для отладки SQL запросов
+            pool_size=20,
+            max_overflow=10,
+            pool_pre_ping=True,  # Проверка соединения перед использованием
+        )
+        
+        # Создаем session maker
+        self.async_session = async_sessionmaker(
+            self.engine,
+            class_=AsyncSession,
+            expire_on_commit=False
+        )
+        
         self._initialized = False
     
     async def initialize(self):
         """Инициализация базы данных при запуске"""
         if self._initialized:
             return
-            
-        # Создаем директорию если не существует
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         
-        # Проверяем существование БД
-        db_exists = Path(self.db_path).exists()
-        
-        if not db_exists:
-            logger.info("База данных не найдена. Создаем новую...")
-            await self._create_database()
-        else:
-            logger.info("База данных найдена. Проверяем структуру...")
-            await self._verify_database_structure()
-        
-        # Создаем/обновляем тестовых пользователей
-        await self._ensure_test_users()
-        
-        self._initialized = True
-        logger.info("База данных инициализирована успешно")
-    
-    async def _create_database(self):
-        """Создание новой базы данных"""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
-                CREATE TABLE users (
-                    id TEXT PRIMARY KEY,
-                    user_name TEXT NOT NULL,
-                    remaining_seconds INTEGER NOT NULL DEFAULT 0,
-                    permanent_seconds INTEGER NOT NULL DEFAULT 0,
-                    iat INTEGER,
-                    exp INTEGER,
-                    email TEXT,
-                    tariff TEXT,
-                    payment_date INTEGER,
-                    payment_status TEXT,
-                    status TEXT,
-                    subscription_id TEXT,
-                    payment_system TEXT,
-                    subscription_status TEXT
-                )
-            """)
+        try:
+            # Создаем все таблицы
+            async with self.engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
             
-            # Миграция: добавляем новые поля если их нет
-            try:
-                # Проверяем существование колонок
-                cursor = await db.execute("PRAGMA table_info(users)")
-                columns = await cursor.fetchall()
-                column_names = [col[1] for col in columns]
-                
-                if 'subscription_id' not in column_names:
-                    await db.execute("ALTER TABLE users ADD COLUMN subscription_id TEXT")
-                if 'payment_system' not in column_names:
-                    await db.execute("ALTER TABLE users ADD COLUMN payment_system TEXT")
-                if 'subscription_status' not in column_names:
-                    await db.execute("ALTER TABLE users ADD COLUMN subscription_status TEXT")
-                
-                await db.commit()
-            except Exception as e:
-                print(f"Миграция БД: {e}")
+            logger.info("Таблицы PostgreSQL созданы/проверены")
             
-            await db.execute("""
-                CREATE TABLE topic (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
-                )
-            """)
-            await db.commit()
-            logger.info("Таблицы users и topic созданы")
-    
-    async def _verify_database_structure(self):
-        """Проверка и обновление структуры существующей БД"""
-        async with aiosqlite.connect(self.db_path) as db:
-            # Получаем информацию о существующих колонках
-            cursor = await db.execute("PRAGMA table_info(users)")
-            columns = await cursor.fetchall()
-            existing_columns = {col[1] for col in columns}
+            # Создаем/обновляем тестовых пользователей
+            await self._ensure_test_users()
             
-            required_columns = {
-                'id': 'TEXT PRIMARY KEY',
-                'user_name': 'TEXT NOT NULL',
-                'remaining_seconds': 'INTEGER NOT NULL DEFAULT 0',
-                'permanent_seconds': 'INTEGER NOT NULL DEFAULT 0',
-                'iat': 'INTEGER',
-                'exp': 'INTEGER',
-                'email': 'TEXT',
-                'tariff': 'TEXT',
-                'payment_date': 'INTEGER',
-                'payment_status': 'TEXT',
-                'status': 'TEXT'
-            }
+            self._initialized = True
+            logger.info("База данных PostgreSQL инициализирована успешно")
             
-            # Проверяем, есть ли старое поле remaining_time и нужно ли его мигрировать
-            if 'remaining_time' in existing_columns and 'remaining_seconds' not in existing_columns:
-                logger.info("Мигрируем remaining_time в remaining_seconds")
-                # Добавляем новое поле
-                await db.execute("ALTER TABLE users ADD COLUMN remaining_seconds INTEGER NOT NULL DEFAULT 0")
-                # Копируем данные, конвертируя минуты в секунды
-                await db.execute("UPDATE users SET remaining_seconds = remaining_time * 60")
-                await db.commit()
-                logger.info("Миграция завершена")
-            
-            # Проверяем наличие таблицы users
-            cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-            table_exists = await cursor.fetchone()
-            
-            if not table_exists:
-                logger.info("Таблица users не найдена. Создаем...")
-                await self._create_database()
-                return
-            
-            # Проверяем наличие таблицы topic
-            cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='topic'")
-            topic_table_exists = await cursor.fetchone()
-            
-            if not topic_table_exists:
-                logger.info("Таблица topic не найдена. Создаем...")
-                await db.execute("""
-                    CREATE TABLE topic (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        description TEXT NOT NULL,
-                        FOREIGN KEY (user_id) REFERENCES users (id)
-                    )
-                """)
-                await db.commit()
-                logger.info("Таблица topic создана")
-            
-            # Добавляем недостающие колонки
-            for column_name, column_type in required_columns.items():
-                if column_name not in existing_columns:
-                    logger.info(f"Добавляем недостающую колонку: {column_name}")
-                    try:
-                        await db.execute(f"ALTER TABLE users ADD COLUMN {column_name} {column_type}")
-                    except sqlite3.OperationalError as e:
-                        logger.warning(f"Не удалось добавить колонку {column_name}: {e}")
-            
-            await db.commit()
+        except Exception as e:
+            logger.error(f"Ошибка инициализации БД: {e}")
+            raise
     
     async def _ensure_test_users(self):
         """Создает или обновляет тестовых пользователей"""
         test_users = [
             {
                 "id": "zeqipe",
-                "user_name": "zeqipe", 
-                "remaining_seconds": 7200,    # 120 минут сгораемых (120 * 60)
-                "permanent_seconds": 2700,    # 45 минут несгораемых (45 * 60)
+                "user_name": "zeqipe",
+                "remaining_seconds": 7200,    # 120 минут сгораемых
+                "permanent_seconds": 2700,    # 45 минут несгораемых
                 "email": "test1@example.com",
                 "tariff": "standart",
-                "status": "vip"
+                "status": "vip",
+                "payment_status": "active"
             },
             {
                 "id": "dany",
                 "user_name": "dany",
-                "remaining_seconds": 18000,   # 300 минут сгораемых (300 * 60)
-                "permanent_seconds": 0,       # Нет несгораемых
+                "remaining_seconds": 18000,   # 300 минут сгораемых
+                "permanent_seconds": 0,
                 "email": "test2@example.com",
-                "tariff": "pro"
+                "tariff": "pro",
+                "payment_status": "active"
             },
             {
                 "id": "demo_user",
                 "user_name": "demo_user",
-                "remaining_seconds": 0,        # 5 секунд сгораемых
-                "permanent_seconds": 5,       # Нет несгораемых
-                "email": "demo@fluentgo.com", 
-                "tariff": "free",
-                "status": "CMO"
+                "remaining_seconds": 0,
+                "permanent_seconds": 5,       # 5 секунд для демо
+                "email": "demo@fluentgo.com",
+                "tariff": "free-guest",
+                "status": "CMO",
+                "payment_status": "active"
             }
         ]
         
-        try:
-            async with aiosqlite.connect(self.db_path) as db:
-                for user_data in test_users:
-                    user_id = user_data["id"]
-                    user_seconds = user_data["remaining_seconds"]
-                    permanent_seconds = user_data["permanent_seconds"]
-                    
-                    # Проверяем существование пользователя
-                    cursor = await db.execute("SELECT id FROM users WHERE id = ?", (user_id,))
-                    exists = await cursor.fetchone()
-                    
-                    if exists:
-                        # Обновляем существующего пользователя
-                        await db.execute(
-                            "UPDATE users SET user_name = ?, remaining_seconds = ?, permanent_seconds = ?, email = ?, tariff = ?, payment_status = ?, status = ? WHERE id = ?",
-                            (user_data["user_name"], user_seconds, permanent_seconds, user_data["email"], user_data["tariff"], "active", user_data.get("status", "user"), user_id)
-                        )
-                        logger.info(f"Пользователь {user_id} обновлен: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
-                    else:
-                        # Создаем нового пользователя
-                        await db.execute("""
-                            INSERT INTO users (id, user_name, remaining_seconds, permanent_seconds, iat, exp, email, tariff, payment_date, payment_status, status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (user_id, user_data["user_name"], user_seconds, permanent_seconds, None, None, user_data["email"], user_data["tariff"], None, "active", user_data.get("status", "user")))
-                        logger.info(f"Пользователь {user_id} создан: {user_seconds//60} обычных + {permanent_seconds//60} несгораемых минут, тариф {user_data['tariff']}")
+        async with self.async_session() as session:
+            for user_data in test_users:
+                user_id = user_data["id"]
                 
-                await db.commit()
-        except Exception as e:
-            logger.error(f"Ошибка создания/обновления тестовых пользователей: {e}")
+                # Проверяем существование пользователя
+                result = await session.execute(
+                    select(User).where(User.id == user_id)
+                )
+                existing_user = result.scalar_one_or_none()
+                
+                if existing_user:
+                    # Обновляем существующего
+                    for key, value in user_data.items():
+                        setattr(existing_user, key, value)
+                    logger.info(f"Пользователь {user_id} обновлен")
+                else:
+                    # Создаем нового
+                    new_user = User(**user_data)
+                    session.add(new_user)
+                    logger.info(f"Пользователь {user_id} создан")
+            
+            await session.commit()
     
-    async def get_user(self, user_id: str) -> dict:
+    async def get_user(self, user_id: str) -> Optional[dict]:
         """Получение данных пользователя по ID"""
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM users WHERE id = ?", (user_id,)
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(User).where(User.id == user_id)
             )
-            row = await cursor.fetchone()
-            return dict(row) if row else None
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                return None
+            
+            # Преобразуем ORM объект в словарь
+            return {
+                "id": user.id,
+                "user_name": user.user_name,
+                "remaining_seconds": user.remaining_seconds,
+                "permanent_seconds": user.permanent_seconds,
+                "iat": user.iat,
+                "exp": user.exp,
+                "email": user.email,
+                "tariff": user.tariff,
+                "payment_date": user.payment_date,
+                "payment_status": user.payment_status,
+                "status": user.status,
+                "subscription_id": user.subscription_id,
+                "payment_system": user.payment_system,
+                "subscription_status": user.subscription_status
+            }
     
-    async def create_user(self, user_id: str, user_name: str, email: str,
-                         remaining_seconds: int = 0, permanent_seconds: int = 0, 
-                         iat: int = None, exp: int = None, tariff: str = "free",
-                         payment_status: str = "unpaid", payment_date: int = None,
-                         status: str = "user") -> bool:
+    async def create_user(
+        self,
+        user_id: str,
+        user_name: str,
+        email: str = None,
+        remaining_seconds: int = 0,
+        permanent_seconds: int = 0,
+        iat: int = None,
+        exp: int = None,
+        tariff: str = "free-guest",
+        payment_status: str = "unpaid",
+        payment_date: int = None,
+        status: str = "user"
+    ) -> bool:
         """Создание нового пользователя"""
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                await db.execute("""
-                    INSERT INTO users (id, user_name, email, remaining_seconds, permanent_seconds, 
-                                      iat, exp, tariff, payment_status, payment_date, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (user_id, user_name, email, remaining_seconds, permanent_seconds, 
-                      iat, exp, tariff, payment_status, payment_date, status))
-                await db.commit()
+            async with self.async_session() as session:
+                new_user = User(
+                    id=user_id,
+                    user_name=user_name,
+                    email=email,
+                    remaining_seconds=remaining_seconds,
+                    permanent_seconds=permanent_seconds,
+                    iat=iat,
+                    exp=exp,
+                    tariff=tariff,
+                    payment_status=payment_status,
+                    payment_date=payment_date,
+                    status=status
+                )
+                session.add(new_user)
+                await session.commit()
                 return True
-        except sqlite3.IntegrityError:
+        except IntegrityError:
             logger.warning(f"Пользователь с ID {user_id} уже существует")
+            return False
+        except Exception as e:
+            logger.error(f"Ошибка создания пользователя {user_id}: {e}")
             return False
     
     async def update_user(self, user_id: str, **kwargs) -> bool:
@@ -262,26 +243,24 @@ class DatabaseHandler:
         if not kwargs:
             return False
         
-        # Формируем SET часть запроса
-        set_parts = []
-        values = []
-        for key, value in kwargs.items():
-            if key in ['user_name', 'remaining_seconds', 'permanent_seconds', 'iat', 'exp', 'email', 'tariff', 'payment_date', 'payment_status', 'status']:
-                set_parts.append(f"{key} = ?")
-                values.append(value)
+        # Фильтруем только допустимые поля
+        allowed_fields = {
+            'user_name', 'remaining_seconds', 'permanent_seconds', 'iat', 'exp',
+            'email', 'tariff', 'payment_date', 'payment_status', 'status',
+            'subscription_id', 'payment_system', 'subscription_status'
+        }
         
-        if not set_parts:
+        update_data = {k: v for k, v in kwargs.items() if k in allowed_fields}
+        
+        if not update_data:
             return False
         
-        values.append(user_id)
-        
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                await db.execute(
-                    f"UPDATE users SET {', '.join(set_parts)} WHERE id = ?",
-                    values
+            async with self.async_session() as session:
+                await session.execute(
+                    sql_update(User).where(User.id == user_id).values(**update_data)
                 )
-                await db.commit()
+                await session.commit()
                 return True
         except Exception as e:
             logger.error(f"Ошибка обновления пользователя {user_id}: {e}")
@@ -293,10 +272,7 @@ class DatabaseHandler:
         if not user:
             return 0
         
-        # Возвращаем сумму обычных и несгораемых секунд
-        regular_seconds = user.get('remaining_seconds', 0)
-        permanent_seconds = user.get('permanent_seconds', 0)
-        return regular_seconds + permanent_seconds
+        return user.get('remaining_seconds', 0) + user.get('permanent_seconds', 0)
     
     async def get_remaining_minutes(self, user_id: str) -> int:
         """Получение оставшихся минут пользователя (с округлением вверх)"""
@@ -304,8 +280,10 @@ class DatabaseHandler:
         return seconds_to_minutes_ceil(seconds)
     
     async def decrease_seconds(self, user_id: str, seconds: int) -> bool:
-        """Уменьшение оставшегося времени пользователя в секундах
-        Сначала тратятся обычные секунды, затем несгораемые"""
+        """
+        Уменьшение оставшегося времени пользователя в секундах
+        Сначала тратятся обычные секунды, затем несгораемые
+        """
         user = await self.get_user(user_id)
         if not user:
             return False
@@ -313,7 +291,6 @@ class DatabaseHandler:
         regular_seconds = user.get('remaining_seconds', 0)
         permanent_seconds = user.get('permanent_seconds', 0)
         
-        # Сначала тратим обычные секунды
         if regular_seconds >= seconds:
             # Хватает обычных секунд
             new_regular = regular_seconds - seconds
@@ -324,8 +301,8 @@ class DatabaseHandler:
             new_permanent = max(0, permanent_seconds - seconds_from_permanent)
             
             return await self.update_user(
-                user_id, 
-                remaining_seconds=0, 
+                user_id,
+                remaining_seconds=0,
                 permanent_seconds=new_permanent
             )
     
@@ -363,30 +340,59 @@ class DatabaseHandler:
         """Установка обычных минут (например, при обновлении подписки)"""
         seconds = minutes_to_seconds(minutes)
         return await self.update_user(user_id, remaining_seconds=seconds)
+    
+    async def close(self):
+        """Закрытие соединения с БД"""
+        await self.engine.dispose()
+
+# ============================================================================
+# TOPIC HANDLER
+# ============================================================================
 
 class TopicHandler:
-    def __init__(self, db_path: str = "users.db"):
-        self.db_path = db_path
+    def __init__(self, db_handler: DatabaseHandler = None):
+        """
+        Инициализация обработчика тем
+        
+        Args:
+            db_handler: Экземпляр DatabaseHandler. Если не указан - создается новый
+        """
+        self.db_handler = db_handler
         self.logger = logging.getLogger(__name__)
         
+        # Создаем папку logs если её нет
+        log_file = 'logs/topic_operations.log'
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        
         # Настройка логирования в файл
-        file_handler = logging.FileHandler('topic_operations.log')
+        file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
         self.logger.setLevel(logging.INFO)
     
+    def _get_session(self):
+        """Получение сессии БД"""
+        if self.db_handler:
+            return self.db_handler.async_session()
+        else:
+            # Fallback на глобальный db_handler
+            return db_handler.async_session()
+    
     async def create_topic(self, user_id: str, title: str, description: str) -> dict:
         """Создание новой темы"""
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                cursor = await db.execute("""
-                    INSERT INTO topic (user_id, title, description)
-                    VALUES (?, ?, ?)
-                """, (user_id, title, description))
-                await db.commit()
-                topic_id = cursor.lastrowid
+            async with self._get_session() as session:
+                new_topic = Topic(
+                    user_id=user_id,
+                    title=title,
+                    description=description
+                )
+                session.add(new_topic)
+                await session.flush()  # Получаем ID до коммита
+                topic_id = new_topic.id
+                await session.commit()
                 
                 self.logger.info(f"Создана тема ID:{topic_id} для пользователя {user_id}")
                 return {"status": "success", "topic_id": topic_id}
@@ -397,16 +403,23 @@ class TopicHandler:
     async def get_user_topics(self, user_id: str) -> dict:
         """Получение всех тем пользователя"""
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                db.row_factory = aiosqlite.Row
-                cursor = await db.execute("""
-                    SELECT id, title, description FROM topic WHERE user_id = ?
-                """, (user_id,))
-                rows = await cursor.fetchall()
-                topics = [dict(row) for row in rows]
+            async with self._get_session() as session:
+                result = await session.execute(
+                    select(Topic).where(Topic.user_id == user_id)
+                )
+                topics = result.scalars().all()
                 
-                self.logger.info(f"Получено {len(topics)} тем для пользователя {user_id}")
-                return {"status": "success", "topics": topics}
+                topics_list = [
+                    {
+                        "id": topic.id,
+                        "title": topic.title,
+                        "description": topic.description
+                    }
+                    for topic in topics
+                ]
+                
+                self.logger.info(f"Получено {len(topics_list)} тем для пользователя {user_id}")
+                return {"status": "success", "topics": topics_list}
         except Exception as e:
             self.logger.error(f"Ошибка получения тем для пользователя {user_id}: {e}")
             return {"status": "error", "message": str(e)}
@@ -414,24 +427,25 @@ class TopicHandler:
     async def update_topic(self, topic_id: int, user_id: str, title: str, description: str) -> dict:
         """Обновление темы"""
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                # Проверяем принадлежность темы пользователю
-                cursor = await db.execute("SELECT user_id FROM topic WHERE id = ?", (topic_id,))
-                row = await cursor.fetchone()
+            async with self._get_session() as session:
+                # Получаем тему
+                result = await session.execute(
+                    select(Topic).where(Topic.id == topic_id)
+                )
+                topic = result.scalar_one_or_none()
                 
-                if not row:
+                if not topic:
                     self.logger.warning(f"Тема ID:{topic_id} не найдена")
                     return {"status": "error", "message": "Тема не найдена"}
                 
-                if row[0] != user_id:
+                if topic.user_id != user_id:
                     self.logger.warning(f"Пользователь {user_id} пытался изменить чужую тему ID:{topic_id}")
                     return {"status": "forbidden", "message": "Доступ запрещен"}
                 
                 # Обновляем тему
-                await db.execute("""
-                    UPDATE topic SET title = ?, description = ? WHERE id = ?
-                """, (title, description, topic_id))
-                await db.commit()
+                topic.title = title
+                topic.description = description
+                await session.commit()
                 
                 self.logger.info(f"Обновлена тема ID:{topic_id} пользователем {user_id}")
                 return {"status": "success"}
@@ -442,22 +456,24 @@ class TopicHandler:
     async def delete_topic(self, topic_id: int, user_id: str) -> dict:
         """Удаление темы"""
         try:
-            async with aiosqlite.connect(self.db_path) as db:
-                # Проверяем принадлежность темы пользователю
-                cursor = await db.execute("SELECT user_id FROM topic WHERE id = ?", (topic_id,))
-                row = await cursor.fetchone()
+            async with self._get_session() as session:
+                # Получаем тему
+                result = await session.execute(
+                    select(Topic).where(Topic.id == topic_id)
+                )
+                topic = result.scalar_one_or_none()
                 
-                if not row:
+                if not topic:
                     self.logger.warning(f"Тема ID:{topic_id} не найдена")
                     return {"status": "error", "message": "Тема не найдена"}
                 
-                if row[0] != user_id:
+                if topic.user_id != user_id:
                     self.logger.warning(f"Пользователь {user_id} пытался удалить чужую тему ID:{topic_id}")
                     return {"status": "forbidden", "message": "Доступ запрещен"}
                 
                 # Удаляем тему
-                await db.execute("DELETE FROM topic WHERE id = ?", (topic_id,))
-                await db.commit()
+                await session.delete(topic)
+                await session.commit()
                 
                 self.logger.info(f"Удалена тема ID:{topic_id} пользователем {user_id}")
                 return {"status": "success"}
@@ -465,6 +481,29 @@ class TopicHandler:
             self.logger.error(f"Ошибка удаления темы ID:{topic_id} пользователем {user_id}: {e}")
             return {"status": "error", "message": str(e)}
 
-# Глобальные экземпляры
+# ============================================================================
+# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ
+# ============================================================================
+
 db_handler = DatabaseHandler()
-topic_handler = TopicHandler()
+topic_handler = TopicHandler(db_handler)
+
+# ============================================================================
+# ЭКСПОРТЫ
+# ============================================================================
+
+__all__ = [
+    # Утилиты
+    'minutes_to_seconds',
+    'seconds_to_minutes_ceil',
+    # Модели
+    'Base',
+    'User',
+    'Topic',
+    # Обработчики
+    'DatabaseHandler',
+    'TopicHandler',
+    # Глобальные экземпляры
+    'db_handler',
+    'topic_handler',
+]

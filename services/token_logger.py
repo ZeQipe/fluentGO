@@ -1,11 +1,14 @@
+import os
 from datetime import datetime
 from typing import Optional
 
 class TokenLogger:
     """Логгер для записи использованных токенов OpenAI"""
     
-    def __init__(self, log_file: str = "tokens.txt"):
+    def __init__(self, log_file: str = "logs/tokens.txt"):
         self.log_file = log_file
+        # Создаем папку logs если её нет
+        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
     
     def log_tokens(
         self, 

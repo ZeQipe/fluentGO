@@ -5,8 +5,10 @@ from typing import Any, Dict
 class CronLogger:
     """Логгер для кронтабов с детальными отчетами"""
     
-    def __init__(self, log_file: str = "cron_logs.txt"):
+    def __init__(self, log_file: str = "logs/cron_logs.txt"):
         self.log_file = log_file
+        # Создаем папку logs если её нет
+        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
     
     def log(self, task_name: str, level: str, message: str, data: Dict[str, Any] = None):
         """

@@ -1,5 +1,5 @@
 fastapi
-aiosqlite
+uvicorn[standard]
 PyJWT
 python-dotenv
 httpx
@@ -9,9 +9,16 @@ aiohttp
 numpy
 python-multipart
 silero-vad
-uvicorn[standard]
 torch
 torchaudio
 apscheduler
 pytz
 reportlab
+
+# PostgreSQL
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.29.0
+alembic>=1.13.0
+
+# Legacy SQLite support (для миграции)
+aiosqlite

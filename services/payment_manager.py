@@ -38,7 +38,7 @@ processed_payment_ids: set = set()
 # ========================================
 def log_payment(level: str, message: str, data: dict = None):
     """
-    Логирование платежных операций в файл payment_logs.txt
+    Логирование платежных операций в файл logs/payment_logs.txt
     
     Args:
         level: Уровень лога (INFO, ERROR, WARNING)
@@ -46,6 +46,11 @@ def log_payment(level: str, message: str, data: dict = None):
         data: Дополнительные данные для логирования
     """
     try:
+        log_file = "logs/payment_logs.txt"
+        
+        # Создаем папку logs если её нет
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] [{level}] {message}"
         
@@ -54,7 +59,7 @@ def log_payment(level: str, message: str, data: dict = None):
         
         log_entry += "\n" + "="*80 + "\n"
         
-        with open("payment_logs.txt", "a", encoding="utf-8") as f:
+        with open(log_file, "a", encoding="utf-8") as f:
             f.write(log_entry)
     except Exception as e:
         print(f"Ошибка логирования: {e}")

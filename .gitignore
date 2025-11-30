@@ -183,5 +183,6 @@ out/
 # Production build
 build/
 dist/
-payment_logs.txt
-cron_logs.txt
+
+# Logs folder
+logs/

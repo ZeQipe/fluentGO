@@ -45,23 +45,36 @@ async def cleanup_guest_users_task():
     cron_logger.log_task_start(task_name)
     
     try:
-        # Находим всех пользователей с ID вида user_{ip}
-        # В sqlite нет regex, поэтому получим всех и отфильтруем
-        async with db_handler.get_connection() as db:
-            cursor = await db.execute("SELECT id, user_name FROM users")
-            all_users = await cursor.fetchall()
+        from sqlalchemy import select, delete
+        from database import User, Topic
         
         deleted_count = 0
-        for user in all_users:
-            user_id = user[0]
-            # Проверяем паттерн: user_{ip} (например user_192_168_1_1)
-            if user_id.startswith("user_") and user_id.replace("user_", "").replace("_", ".").count(".") >= 3:
-                # Это гостевой пользователь - удаляем
-                async with db_handler.get_connection() as db:
-                    await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
-                    await db.execute("DELETE FROM topic WHERE user_id = ?", (user_id,))
-                    await db.commit()
-                deleted_count += 1
+        
+        async with db_handler.async_session() as session:
+            # Находим всех пользователей
+            result = await session.execute(select(User.id))
+            all_user_ids = [row[0] for row in result.all()]
+            
+            # Фильтруем гостевых пользователей (user_{ip})
+            guest_ids = []
+            for user_id in all_user_ids:
+                if user_id.startswith("user_") and user_id.replace("user_", "").replace("_", ".").count(".") >= 3:
+                    guest_ids.append(user_id)
+            
+            # Удаляем гостевых пользователей и их темы
+            if guest_ids:
+                # Удаляем темы
+                await session.execute(
+                    delete(Topic).where(Topic.user_id.in_(guest_ids))
+                )
+                
+                # Удаляем пользователей
+                await session.execute(
+                    delete(User).where(User.id.in_(guest_ids))
+                )
+                
+                await session.commit()
+                deleted_count = len(guest_ids)
         
         cron_logger.log_task_success(task_name, f"Удалено {deleted_count} гостевых пользователей", {
             "deleted_count": deleted_count
@@ -83,16 +96,19 @@ async def process_subscription_payments_task():
     cron_logger.log_task_start(task_name)
     
     try:
+        from sqlalchemy import select
+        from database import User
+        
         # Находим пользователей с активными подписками
-        async with db_handler.get_connection() as db:
-            cursor = await db.execute("""
-                SELECT id, subscription_id, payment_system, payment_date, tariff, subscription_status
-                FROM users
-                WHERE subscription_status = 'active'
-                AND payment_date IS NOT NULL
-                AND subscription_id IS NOT NULL
-            """)
-            subscribers = await cursor.fetchall()
+        async with db_handler.async_session() as session:
+            result = await session.execute(
+                select(User.id, User.subscription_id, User.payment_system, 
+                       User.payment_date, User.tariff, User.subscription_status)
+                .where(User.subscription_status == 'active')
+                .where(User.payment_date.isnot(None))
+                .where(User.subscription_id.isnot(None))
+            )
+            subscribers = result.all()
         
         processed_count = 0
         success_count = 0
@@ -244,16 +260,19 @@ async def grant_free_minutes_task():
     cron_logger.log_task_start(task_name)
     
     try:
+        from sqlalchemy import select, or_
+        from database import User
+        
         # Находим авторизованных без подписки, без несгораемых минут, с балансом 0
-        async with db_handler.get_connection() as db:
-            cursor = await db.execute("""
-                SELECT id FROM users
-                WHERE id NOT LIKE 'user_%'
-                AND (tariff IS NULL OR tariff = 'free')
-                AND permanent_seconds = 0
-                AND remaining_seconds = 0
-            """)
-            eligible_users = await cursor.fetchall()
+        async with db_handler.async_session() as session:
+            result = await session.execute(
+                select(User.id)
+                .where(~User.id.like('user_%'))
+                .where(or_(User.tariff.is_(None), User.tariff == 'free'))
+                .where(User.permanent_seconds == 0)
+                .where(User.remaining_seconds == 0)
+            )
+            eligible_users = result.all()
         
         granted_count = 0
         for user in eligible_users:

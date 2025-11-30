@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     g++ \
     ffmpeg \
     libsndfile1 \
+    libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем файл зависимостей
@@ -22,7 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Создаем необходимые директории
-RUN mkdir -p temp static document
+RUN mkdir -p temp static document logs
 
 # Устанавливаем переменные окружения
 ENV PYTHONPATH=/app
